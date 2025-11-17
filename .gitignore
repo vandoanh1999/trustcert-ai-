@@ -1,0 +1,16 @@
+# Ignore LoRA model files
+lora_storage/*.safetensors
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-selfcheck.json
+.eggs/
+dist/
+build/
+*.egg-info/
