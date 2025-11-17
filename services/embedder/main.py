@@ -2,9 +2,10 @@ from fastapi import FastAPI
 from sentence_transformers import SentenceTransformer
 from pydantic import BaseModel
 from typing import List
+from ..common import config
 
 app = FastAPI(title="Embedder Service")
-embedder = SentenceTransformer('BAAI/bge-small-en-v1.5', device='cuda')
+embedder = SentenceTransformer(config.EMBEDDING_MODEL_NAME, device='cuda')
 
 class EmbedRequest(BaseModel):
     texts: List[str]

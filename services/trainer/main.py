@@ -1,4 +1,3 @@
-# services/trainer/main.py
 from fastapi import FastAPI
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -6,24 +5,29 @@ from peft import get_peft_model, LoraConfig
 from qdrant_client import QdrantClient, models
 import httpx
 import uuid
+import boto3
+import os
+from pathlib import Path
+from ..common import config
 
 app = FastAPI(title="Trainer Service (Registry-Aware)")
 
-# Load model 1 lần
-model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-qdrant = QdrantClient("http://qdrant:6333")
+# --- Khởi tạo Clients ---
+model = AutoModelForCausalLM.from_pretrained(config.BASE_MODEL_NAME, device_map="auto", torch_dtype=torch.float16)
+tokenizer = AutoTokenizer.from_pretrained(config.BASE_MODEL_NAME)
+qdrant = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
 client = httpx.Client()
+s3_client = boto3.client(
+    's3',
+    endpoint_url=config.S3_ENDPOINT_URL,
+    aws_access_key_id=config.S3_ACCESS_KEY_ID,
+    aws_secret_access_key=config.S3_SECRET_ACCESS_KEY
+)
 
-# Tạo collection cho LoRA Registry
-try:
-    qdrant.get_collection(collection_name="lora_registry")
-except Exception:
-    qdrant.recreate_collection(
-        collection_name="lora_registry",
-        vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE) # Giả sử BAAI/bge-small
-    )
+# --- Logic khởi động ---
+@app.on_event("startup")
+def startup_event():
+    # ... (logic tạo Qdrant collection và S3 bucket) ...
 
 @app.post("/train_lora")
 def train_lora(content: str, user_id: str, source_id: str):
@@ -48,23 +52,27 @@ def train_lora(content: str, user_id: str, source_id: str):
         optimizer.step()
         optimizer.zero_grad()
 
-    lora_path = f"/app/lora_storage/lora_{user_id}_{source_id}.safetensors"
-    lora_model.save_pretrained(lora_path)
+    temp_lora_dir = f"/tmp/lora_{user_id}_{source_id}"
+    lora_model.save_pretrained(temp_lora_dir)
 
-    # 1. TẠO EMBEDDING ĐẠI DIỆN CHO LORA NÀY
-    # Dùng chính content để làm vector đại diện
-    content_vector_resp = client.post("http://embedder:8002/embed", json={"texts": [content]})
+    s3_lora_path = f"loras/{user_id}/{source_id}"
+    for root, dirs, files in os.walk(temp_lora_dir):
+        for file in files:
+            local_path = os.path.join(root, file)
+            s3_key = f"{s3_lora_path}/{file}"
+            s3_client.upload_file(local_path, config.S3_BUCKET_NAME, s3_key)
+
+    content_vector_resp = client.post(f"{config.EMBEDDER_URL}/embed", json={"texts": [content]})
     content_vector = content_vector_resp.json()[0]
 
-    # 2. ĐĂNG KÝ LORA VÀO QDRANT
     qdrant.upsert(
         collection_name="lora_registry",
         points=[
             models.PointStruct(
-                id=str(uuid.uuid4()), # ID duy nhất
+                id=str(uuid.uuid4()),
                 vector=content_vector,
                 payload={
-                    "path": lora_path,
+                    "path": s3_lora_path,
                     "user_id": user_id,
                     "source_id": source_id
                 }
@@ -72,8 +80,7 @@ def train_lora(content: str, user_id: str, source_id: str):
         ]
     )
 
-    # Free memory
     del lora_model
     torch.cuda.empty_cache()
 
-    return {"lora_path": lora_path}
+    return {"lora_path": s3_lora_path}
