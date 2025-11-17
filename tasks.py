@@ -2,36 +2,46 @@ from celery import Celery
 import httpx
 from qdrant_client import QdrantClient, models
 from services.common import config
+from services.common.hf_client import hf_client # Import client mới
+import asyncio
 
 celery_app = Celery('tasks', broker=f'redis://{config.REDIS_HOST}:{config.REDIS_PORT}/0')
 client = httpx.Client()
 
 @celery_app.task
 def assimilate_task(source_id: str, content: str, user_id: str):
-    # 1. Extract graph
-    graph = client.post(f"{config.GRAPH_URL}/extract", json={"text": content}).json()
 
-    # 2. Embed nodes
-    vectors = client.post(f"{config.EMBEDDER_URL}/embed", json={"texts": graph["nodes"]}).json()
+    async def do_assimilation():
+        # 1. Extract graph
+        graph = client.post(f"{config.GRAPH_URL}/extract", json={"text": content}).json()
+        nodes = graph.get("nodes", [])
+        if not nodes:
+            return {"status": "done", "lora_path": "N/A", "entities": 0, "relations": 0}
 
-    # 3. Upsert Qdrant
-    qdrant = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
-    qdrant.upsert(
-        collection_name="knowledge_graph",
-        points=[
-            models.PointStruct(
-                id=f"{source_id}_{i}",
-                vector=vec,
-                payload={"node": node, "source": source_id}
-            ) for i, (vec, node) in enumerate(zip(vectors, graph["nodes"]))
-        ]
-    )
+        # 2. Embed nodes (dùng HF API)
+        vectors = await hf_client.get_embeddings(nodes, model=config.EMBEDDING_MODEL_NAME)
 
-    # 4. Ghi graph vào Neo4j
-    client.post(f"{config.GRAPH_URL}/write_to_neo4j", json={"graph": graph, "source_id": source_id})
+        # 3. Upsert Qdrant
+        qdrant = QdrantClient(url=config.QDRANT_URL, api_key=config.QDRANT_API_KEY)
+        qdrant.upsert(
+            collection_name="knowledge_graph",
+            points=[
+                models.PointStruct(
+                    id=f"{source_id}_{i}",
+                    vector=vec,
+                    payload={"node": node, "source": source_id}
+                ) for i, (vec, node) in enumerate(zip(vectors, nodes))
+            ]
+        )
 
-    # 5. Train S-LoRA qua trainer-service
-    train_resp = client.post(f"{config.TRAINER_URL}/train_lora", json={"content": content, "user_id": user_id, "source_id": source_id})
-    lora_path = train_resp.json()["lora_path"]
+        # 4. Ghi graph vào Neo4j
+        client.post(f"{config.GRAPH_URL}/write_to_neo4j", json={"graph": graph, "source_id": source_id})
 
-    return {"status": "done", "lora_path": lora_path, "entities": len(graph["nodes"]), "relations": len(graph["edges"])}
+        # 5. Huấn luyện LoRA sẽ được chuyển sang Colab Notebook
+        # Tạm thời bỏ qua bước này
+        lora_path = "N/A - Use Colab Notebook for training"
+
+        return {"status": "done", "lora_path": lora_path, "entities": len(nodes), "relations": len(graph.get("edges", []))}
+
+    # Chạy hàm async bên trong tác vụ Celery sync
+    return asyncio.run(do_assimilation())

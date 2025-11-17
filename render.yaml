@@ -1,0 +1,45 @@
+services:
+  # --- Dịch vụ Nền ---
+  - type: pserv # Private Service (không public)
+    name: redis
+    dockerfilePath: ./dockerfiles/redis.Dockerfile # Sẽ tạo Dockerfile này
+    autoDeploy: false # Chỉ cần khởi động một lần
+
+  # --- Các Service AI/API (CPU) ---
+  - type: web
+    name: gateway
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 4 -k uvicorn.workers.UvicornWorker api.gateway:app"
+    healthCheckPath: /health # Sẽ thêm endpoint này
+    envVars:
+      - fromGroup: twp-omega-secrets
+
+  - type: web
+    name: graph-service
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.graph.main:app"
+    healthCheckPath: /health # Sẽ thêm endpoint này
+    envVars:
+      - fromGroup: twp-omega-secrets
+
+  - type: web
+    name: router-service
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.router.main:app"
+    healthCheckPath: /health # Sẽ thêm endpoint này
+    envVars:
+      - fromGroup: twp-omega-secrets
+
+  # ... (Thêm các service còn lại như gnn, proactive)
+
+  # --- Worker chạy nền ---
+  - type: worker
+    name: celery-worker
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A tasks worker --loglevel=info"
+    envVars:
+      - fromGroup: twp-omega-secrets

@@ -1,122 +1,53 @@
 version: '3.9'
 
 volumes:
-  qdrant_data:
   neo4j_data:
   minio_data:
 
 services:
   minio:
-    image: minio/minio:RELEASE.2023-09-07T21-50-25Z
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
-    volumes:
-      - minio_data:/data
-
-  vllm:
-    image: vllm/vllm-openai:latest
-    command: --model ${BASE_MODEL_NAME} --port 8001 --enable-lora --max-lora-rank 8
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./lora_storage:/app/lora_storage # Sẽ được thay thế bằng S3
+    # ... (giữ nguyên)
 
   frontend:
-    build: ./frontend
-    env_file: .env
-    ports:
-      - "8501:8501"
-    depends_on: [gateway]
+    # ... (giữ nguyên)
 
   proactive-core:
     build: ./services/proactive
     env_file: .env
     command: uvicorn main:app --host 0.0.0.0 --port 8008
-    ports:
-      - "8008:8008"
-    depends_on: [redis, router, gnn, embedder]
-
-  qdrant:
-    image: qdrant/qdrant:v1.10
-    ports:
-      - "6333:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
+    ports: ["8008:8008"]
+    depends_on: [redis, router, gnn]
 
   redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-
-  neo4j:
-    image: neo4j:5.12
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    environment:
-      NEO4J_AUTH: ${NEO4J_USER}/${NEO4J_PASSWORD}
-    volumes:
-      - neo4j_data:/data
+    # ... (giữ nguyên)
 
   gateway:
     build: .
     command: uvicorn api.gateway:app --host 0.0.0.0 --port 8000
-    ports:
-      - "8000:8000"
+    ports: ["8000:8000"]
     env_file: .env
-    depends_on: [minio, vllm, qdrant, redis, batcher, embedder, graph, router, gnn, neo4j, trainer]
+    depends_on: [minio, redis, graph, router, gnn]
 
   worker:
     build: .
     env_file: .env
     command: celery -A tasks worker --loglevel=info -Q assimilate
-    deploy:
-      replicas: 4
-    depends_on: [minio, batcher, embedder, graph, router, gnn, qdrant, redis, neo4j, trainer]
-    volumes:
-      - ./lora_storage:/app/lora_storage # Sẽ được thay thế bằng S3
-
-  # ... (các service khác giữ nguyên với env_file)
-  batcher:
-    build: ./services/batcher
-    env_file: .env
-    command: uvicorn main:app --host 0.0.0.0 --port 8004
-    ports:
-      - "8004:8004"
-
-  embedder:
-    build: ./services/embedder
-    env_file: .env
-    # ...
+    depends_on: [minio, graph, router, gnn, redis]
 
   graph:
     build: ./services/graph
     env_file: .env
-    # ...
+    command: uvicorn main:app --host 0.0.0.0 --port 8003
+    ports: ["8003:8003"]
 
   router:
     build: ./services/router
     env_file: .env
-    # ...
+    command: uvicorn main:app --host 0.0.0.0 --port 8005
+    ports: ["8005:8005"]
 
   gnn:
     build: ./services/gnn
     env_file: .env
-    # ...
-
-  trainer:
-    build: ./services/trainer
-    env_file: .env
-    # ...
+    command: uvicorn main:app --host 0.0.0.0 --port 8006
+    ports: ["8006:8006"]
