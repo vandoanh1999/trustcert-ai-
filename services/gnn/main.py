@@ -1,98 +1,83 @@
-# services/gnn/main.py
 from fastapi import FastAPI
-import torch
-from torch_geometric.data import Data
-from torch_geometric.nn import GCNConv
 from pydantic import BaseModel
 from neo4j import GraphDatabase
-import numpy as np
+from itertools import combinations
+from services.common import config
+from services.common.hf_client import hf_client # Sử dụng hf_client nếu cần embed lại
 from qdrant_client import QdrantClient
-import httpx
 
-app = FastAPI(title="GNN Service (Real-Eyes)")
-driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", "password"))
-qdrant = QdrantClient("http://qdrant:6333")
-client = httpx.Client() # Để embed nếu cần
+app = FastAPI(title="Graph Reasoning Service")
 
-class GCN(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = GCNConv(384, 64) # Corrected embed_dim to 384
-        self.conv2 = GCNConv(64, 32)
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        x = self.conv1(x, edge_index).relu()
-        x = self.conv2(x, edge_index)
-        return x.mean(dim=0)
+# --- Clients ---
+driver = GraphDatabase.driver(
+    config.NEO4J_URI,
+    auth=(config.NEO4J_USER, config.NEO4J_PASSWORD)
+)
+qdrant = QdrantClient(url=config.QDRANT_URL, api_key=config.QDRANT_API_KEY)
 
-model = GCN()
 
-def get_real_subgraph(entry_vector: list[float]) -> Data:
-    # 1. DÙNG VECTOR ĐỂ TÌM "ĐIỂM VÀO" TRÊN GRAPH
-    hits = qdrant.search(
-        collection_name="knowledge_graph",
-        query_vector=entry_vector,
-        limit=3 # Lấy 3 node gần nhất làm điểm vào
-    )
-    entry_nodes = [hit.payload["node"] for hit in hits if "node" in hit.payload]
+def format_path_to_text(path):
+    """Chuyển một đường đi Neo4j thành một câu văn."""
+    nodes = [record['name'] for record in path['nodes']]
+    relationships = [record['type'] for record in path['relationships']]
 
-    if not entry_nodes:
-        # Nếu không có gì, trả về graph rỗng
-        return Data(x=torch.empty(0, 384), edge_index=torch.empty(0, 2, dtype=torch.long))
+    if not nodes:
+        return ""
 
-    # 2. DÙNG CYPHER THẬT: LẤY 2-HOP SUBGRAPH TỪ ĐIỂM VÀO
-    with driver.session() as session:
-        result = session.run("""
-            MATCH (start:Node) WHERE start.name IN $nodes
-            CALL {
-                WITH start
-                MATCH (start)-[r*1..2]-(neighbor)
-                RETURN DISTINCT neighbor AS n
-                UNION
-                WITH start
-                RETURN start AS n
+    sentence = nodes[0]
+    for i, rel in enumerate(relationships):
+        sentence += f" --[{rel}]--> {nodes[i+1]}"
+    return sentence
+
+def find_meaningful_paths(tx, entry_nodes: list):
+    """
+    Tìm tất cả các đường đi ngắn nhất kết nối các cặp nút đầu vào.
+    """
+    all_paths = []
+    # Tạo tất cả các cặp có thể có từ các nút đầu vào
+    for node1, node2 in combinations(entry_nodes, 2):
+        query = """
+        MATCH (a:Node {name: $node1}), (b:Node {name: $node2}),
+        p = allShortestPaths((a)-[*..5]-(b))
+        RETURN p
+        """
+        result = tx.run(query, node1=node1, node2=node2)
+        for record in result:
+            path = record["p"]
+            path_info = {
+                "nodes": path.nodes,
+                "relationships": path.relationships
             }
-            RETURN n.name AS name
-            """, nodes=entry_nodes
-        )
-        subgraph_nodes = [r["name"] for r in result]
-
-        # Lấy các cạnh (edges) trong subgraph
-        edges_result = session.run("""
-            MATCH (a:Node)-[r:REL]->(b:Node)
-            WHERE a.name IN $nodes AND b.name IN $nodes
-            RETURN a.name AS u, b.name AS v
-            """, nodes=subgraph_nodes
-        )
-
-    # Tạo map từ tên node về index
-    node_map = {name: i for i, name in enumerate(subgraph_nodes)}
-    edges = []
-    for r in edges_result:
-        if r["u"] in node_map and r["v"] in node_map:
-            edges.append([node_map[r["u"]], node_map[r["v"]]])
-
-    # 3. LẤY EMBEDDING CHO CÁC NODE (Feature)
-    # Chúng ta phải lấy embedding thật của các node này
-    node_vectors_resp = client.post("http://embedder:8002/embed",
-                                    json={"texts": subgraph_nodes})
-    node_vectors = np.array(node_vectors_resp.json())
-
-    x = torch.tensor(node_vectors, dtype=torch.float)
-    edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous() if edges else torch.empty(2, 0, dtype=torch.long)
-
-    return Data(x=x, edge_index=edge_index)
-
+            all_paths.append(format_path_to_text(path_info))
+    return all_paths
 
 class TraverseRequest(BaseModel):
     entry_vector: list[float]
 
 @app.post("/traverse")
 def traverse(req: TraverseRequest):
-    data = get_real_subgraph(req.entry_vector)
-    if data.x.shape[0] == 0:
-        return {"context_path": "Không tìm thấy suy luận."}
+    # 1. Tìm các nút đầu vào từ Qdrant
+    hits = qdrant.search(
+        collection_name="knowledge_graph",
+        query_vector=req.entry_vector,
+        limit=3
+    )
+    entry_nodes = list(set([hit.payload["node"] for hit in hits if "node" in hit.payload]))
 
-    path_vector = model(data).tolist()
-    context_path = f"Suy luận (Graph-real): {len(data.x)} nodes, {data.edge_index.shape[1]} edges. Path vector: {path_vector[:3]}"
-    return {"context_path": context_path}
+    if len(entry_nodes) < 2:
+        return {"context_path": "Not enough concepts found in the knowledge graph to form a connection."}
+
+    # 2. Tìm các đường đi kết nối trong Neo4j
+    with driver.session() as session:
+        paths = session.read_transaction(find_meaningful_paths, entry_nodes)
+
+    if not paths:
+        return {"context_path": f"Found concepts: {', '.join(entry_nodes)}. But no direct relationships were found between them."}
+
+    # 3. Tạo bối cảnh từ các đường đi
+    context = "Found following connections in knowledge graph:\n- " + "\n- ".join(paths)
+    return {"context_path": context}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
