@@ -39,3 +39,8 @@ class TopicRequest(BaseModel):
 @app.post("/find_users_by_topic")
 def find_users_by_topic(req: TopicRequest):
     # ... (giữ nguyên logic)
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}

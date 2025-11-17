@@ -69,4 +69,9 @@ async def chat(query: str, user_id: str, api_key: str = Security(get_api_key)):
 
     return {"answer": answer, "loras_used": 0}
 
+@app.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}
+
 # ... (các endpoint khác)

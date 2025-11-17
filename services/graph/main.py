@@ -25,3 +25,8 @@ def traverse(req: TraverseRequest):
     # Tạm thời loại bỏ cache, sẽ có chiến lược cache khác sau này
     context = " → ".join(req.nodes)
     return {"context": context, "source": "computed"}
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}
