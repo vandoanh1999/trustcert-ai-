@@ -1,6 +1,8 @@
+# render.yaml - Cấu hình triển khai trên Render.com
+# Đã được cập nhật để sử dụng biến môi trường riêng lẻ, giúp đơn giản hóa việc thiết lập.
 services:
   # --- Dịch vụ Nền ---
-  - type: worker # Đã chuyển sang worker để tương thích Free Tier
+  - type: worker
     name: redis
     runtime: docker
     dockerfilePath: ./dockerfiles/redis.Dockerfile
@@ -14,32 +16,75 @@ services:
     startCommand: "gunicorn -w 4 -k uvicorn.workers.UvicornWorker api.gateway:app --timeout 120"
     healthCheckPath: /health
     envVars:
-      - fromGroup: twp-omega-secrets
+      # Secrets (Render sẽ hỏi bạn nhập giá trị)
+      - key: NEO4J_URI
+      - key: NEO4J_USER
+      - key: NEO4J_PASSWORD
+      - key: QDRANT_URL
+      - key: QDRANT_API_KEY
+      - key: HF_TOKEN
+      - key: API_KEY
+      # Non-secrets (Có giá trị mặc định)
+      - key: LOG_LEVEL
+        value: INFO
+      - key: BASE_MODEL_NAME
+        value: meta-llama/Meta-Llama-3-8B-Instruct
+      - key: EMBEDDING_MODEL_NAME
+        value: BAAI/bge-small-en-v1.5
+      - key: EMBEDDING_MODEL_DIM
+        value: 384
+      # Service Discovery (Render tự động inject)
+      - key: REDIS_URL
+        fromService:
+          type: worker
+          name: redis
+          property: url
 
   # --- Các Worker AI/API (Nội bộ) ---
-  - type: worker # Chuyển sang worker để bảo mật
+  - type: worker
     name: graph-service
     runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.graph.main:app --timeout 120"
     envVars:
-      - fromGroup: twp-omega-secrets
+      - key: NEO4J_URI
+      - key: NEO4J_USER
+      - key: NEO4J_PASSWORD
+      - key: QDRANT_URL
+      - key: QDRANT_API_KEY
+      - key: HF_TOKEN
+      - key: EMBEDDING_MODEL_NAME
+        value: BAAI/bge-small-en-v1.5
+      - key: REDIS_URL
+        fromService:
+          type: worker
+          name: redis
+          property: url
 
-  - type: worker # Chuyển sang worker để bảo mật
+  - type: worker
     name: router-service
     runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.router.main:app --timeout 120"
     envVars:
-      - fromGroup: twp-omega-secrets
+      - key: QDRANT_URL
+      - key: QDRANT_API_KEY
+      - key: HF_TOKEN
+      - key: EMBEDDING_MODEL_NAME
+        value: BAAI/bge-small-en-v1.5
 
-  - type: worker # Chuyển sang worker để bảo mật
+  - type: worker
     name: gnn-service
     runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.gnn.main:app --timeout 120"
     envVars:
-      - fromGroup: twp-omega-secrets
+      - key: NEO4J_URI
+      - key: NEO4J_USER
+      - key: NEO4J_PASSWORD
+      - key: HF_TOKEN
+      - key: EMBEDDING_MODEL_NAME
+        value: BAAI/bge-small-en-v1.5
 
   # --- Các Worker Chạy Nền Khác ---
   - type: worker
@@ -48,7 +93,23 @@ services:
     buildCommand: "pip install -r requirements.txt"
     startCommand: "celery -A tasks worker --loglevel=info -Q assimilate,default"
     envVars:
-      - fromGroup: twp-omega-secrets
+      - key: NEO4J_URI
+      - key: NEO4J_USER
+      - key: NEO4J_PASSWORD
+      - key: QDRANT_URL
+      - key: QDRANT_API_KEY
+      - key: HF_TOKEN
+      - key: BASE_MODEL_NAME
+        value: meta-llama/Meta-Llama-3-8B-Instruct
+      - key: EMBEDDING_MODEL_NAME
+        value: BAAI/bge-small-en-v1.5
+      - key: REDIS_URL
+        fromService:
+          type: worker
+          name: redis
+          property: url
+      - key: API_GATEWAY_INTERNAL_URL
+        value: http://gateway:8000
 
   - type: worker
     name: proactive-worker
@@ -56,7 +117,9 @@ services:
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python -m services.proactive.main"
     envVars:
-      - fromGroup: twp-omega-secrets
+      - key: API_KEY
+      - key: API_GATEWAY_INTERNAL_URL
+        value: http://gateway:8000
 
   # --- Giao diện Frontend ---
   - type: web
@@ -66,4 +129,9 @@ services:
     startCommand: "streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0"
     autoDeploy: true
     envVars:
-      - fromGroup: twp-omega-secrets
+      # Service Discovery (Render provides the public URL of the gateway)
+      - key: API_GATEWAY_URL
+        fromService:
+          type: web
+          name: gateway
+          property: url
