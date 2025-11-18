@@ -1,12 +1,12 @@
 services:
-  # --- Background Services ---
-  - type: private
+  # --- Dịch vụ Nền ---
+  - type: worker # Đã chuyển sang worker để tương thích Free Tier
     name: redis
     runtime: docker
     dockerfilePath: ./dockerfiles/redis.Dockerfile
     autoDeploy: false
 
-  # --- AI/API Services (CPU) ---
+  # --- Dịch vụ Gateway Công Khai ---
   - type: web
     name: gateway
     runtime: python
@@ -16,34 +16,32 @@ services:
     envVars:
       - fromGroup: twp-omega-secrets
 
-  - type: web
+  # --- Các Worker AI/API (Nội bộ) ---
+  - type: worker # Chuyển sang worker để bảo mật
     name: graph-service
     runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.graph.main:app --timeout 120"
-    healthCheckPath: /health
     envVars:
       - fromGroup: twp-omega-secrets
 
-  - type: web
+  - type: worker # Chuyển sang worker để bảo mật
     name: router-service
     runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.router.main:app --timeout 120"
-    healthCheckPath: /health
     envVars:
       - fromGroup: twp-omega-secrets
 
-  - type: web
+  - type: worker # Chuyển sang worker để bảo mật
     name: gnn-service
     runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.gnn.main:app --timeout 120"
-    healthCheckPath: /health
     envVars:
       - fromGroup: twp-omega-secrets
 
-  # --- Background Workers ---
+  # --- Các Worker Chạy Nền Khác ---
   - type: worker
     name: celery-worker
     runtime: python
@@ -60,9 +58,12 @@ services:
     envVars:
       - fromGroup: twp-omega-secrets
 
-  # --- Frontend ---
-  - type: static
+  # --- Giao diện Frontend ---
+  - type: web
     name: frontend
-    buildCommand: "cd frontend && npm install && npm run build"
-    staticPublishPath: "./frontend/build"
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0"
     autoDeploy: true
+    envVars:
+      - fromGroup: twp-omega-secrets
