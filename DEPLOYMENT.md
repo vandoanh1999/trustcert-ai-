@@ -1,26 +1,48 @@
 # Hướng dẫn Triển khai Lên Render (Cập nhật)
 
-Dự án này được thiết kế để triển khai dễ dàng trên nền tảng Serverless của Render. Quy trình đã được đơn giản hóa để bạn không cần phải tạo Secret Group thủ công.
+Dự án này được thiết kế để triển khai dễ dàng trên Render. Hãy làm theo các bước sau.
 
-## Bước 1: Chuẩn bị Nền tảng
+## Bước 1: Chuẩn bị các Secrets
 
-1.  **Tạo các tài khoản cần thiết:**
-    *   Tạo tài khoản [GitHub](https://github.com/).
-    *   Tạo tài khoản [Render](https://render.com/).
-    *   Tạo tài khoản [Neo4j AuraDB](https://neo4j.com/cloud/aura/) (Free tier) và ghi lại **URI, User, Password**.
-    *   Tạo tài khoản [Qdrant Cloud](https://cloud.qdrant.io/) (Free tier) và ghi lại **URL cụm cluster và API Key**.
-    *   Tạo tài khoản [Hugging Face](https://huggingface.co/) và tạo một [Access Token](https://huggingface.co/settings/tokens) với quyền **read**.
-    *   Tạo một API Key của riêng bạn (ví dụ: dùng trình tạo mật khẩu) để bảo vệ Gateway.
+Trước khi triển khai, bạn cần chuẩn bị sẵn các thông tin sau từ các dịch vụ cloud miễn phí:
 
-2.  **Fork Repository:**
-    *   **Fork** repository này về tài khoản GitHub của bạn.
+1.  **Neo4j AuraDB:**
+    *   `NEO4J_URI`
+    *   `NEO4J_USER` (Thường là `neo4j`)
+    *   `NEO4J_PASSWORD`
+2.  **Qdrant Cloud:**
+    *   `QDRANT_URL` (URL của cụm cluster)
+    *   `QDRANT_API_KEY`
+3.  **Hugging Face:**
+    *   `HF_TOKEN` (Access Token với quyền `read`)
+4.  **Gateway API Key:**
+    *   `API_KEY` (Tạo một chuỗi bí mật của riêng bạn, ví dụ: dùng trình tạo mật khẩu)
 
-## Bước 2: Triển khai trên Render
+## Bước 2: Fork và Triển khai trên Render
 
-1.  Trên dashboard của Render, vào mục **Blueprints** và bấm **New Blueprint Instance**.
-2.  Kết nối tài khoản GitHub của bạn và chọn repository bạn vừa fork.
-3.  **Quan trọng:** Render sẽ tự động phát hiện file `render.yaml` và chuyển bạn đến trang cấu hình. Tại đây, nó sẽ **tự động hiển thị các ô để bạn nhập các giá trị bí mật** (`NEO4J_URI`, `QDRANT_API_KEY`, `API_KEY`, v.v.).
-4.  Cẩn thận điền tất cả các giá trị bạn đã chuẩn bị ở Bước 1 vào các ô tương ứng.
-5.  Sau khi điền xong, bấm **Apply**.
+1.  **Fork Repository:** Fork repository này về tài khoản GitHub của bạn.
+2.  **Tạo Blueprint trên Render:**
+    *   Trên dashboard Render, vào mục **Blueprints** và bấm **New Blueprint Instance**.
+    *   Kết nối tài khoản GitHub của bạn và chọn repository bạn vừa fork.
+    *   Render sẽ tự động đọc file `render.yaml` và liệt kê tất cả các dịch vụ.
+    *   Bấm **Apply** để Render bắt đầu tạo các dịch vụ. Quá trình build ban đầu có thể sẽ thất bại vì thiếu secrets, điều này là bình thường.
 
-Render sẽ bắt đầu xây dựng và triển khai tất cả các dịch vụ. Quá trình này có thể mất vài phút. Sau khi hoàn tất, giao diện Streamlit của bạn sẽ có một URL công khai và hệ thống sẽ sẵn sàng để sử dụng.
+## Bước 3: Cấu hình Biến Môi trường (Secrets)
+
+Đây là bước quan trọng nhất. Vì `render.yaml` chỉ định nghĩa *tên* của các secret, bạn cần phải cung cấp *giá trị* cho chúng.
+
+1.  Sau khi Render đã tạo xong các dịch vụ từ Blueprint, hãy vào **Dashboard** của bạn.
+2.  Bạn sẽ thấy một danh sách các dịch vụ (`gateway`, `graph-service`, `celery-worker`, v.v.).
+3.  Với **từng dịch vụ** trong danh sách này, hãy làm như sau:
+    *   Click vào tên dịch vụ.
+    *   Chọn tab **Environment** ở menu bên trái.
+    *   Bạn sẽ thấy một danh sách các biến môi trường. Những biến nào có giá trị rỗng (`value: ""`) trong `render.yaml` sẽ hiển thị ở đây để bạn điền vào.
+    *   Click vào **"Add Environment Variable"** hoặc chỉnh sửa các biến hiện có, điền các giá trị bạn đã chuẩn bị ở **Bước 1**.
+    *   **Ví dụ:** Cho dịch vụ `gateway`, bạn cần điền `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `QDRANT_URL`, `QDRANT_API_KEY`, `HF_TOKEN`, và `API_KEY`.
+    *   Lặp lại quy trình này cho tất cả các dịch vụ (`graph-service`, `router-service`, `gnn-service`, `celery-worker`, `proactive-worker`).
+4.  **Lưu và Triển khai lại:**
+    *   Sau khi bạn đã thêm tất cả các secret cho một dịch vụ, hãy bấm **Save Changes**.
+    *   Render sẽ tự động triển khai lại dịch vụ đó với các secret mới.
+    *   Sau khi tất cả các dịch vụ đã được cập nhật và triển khai lại thành công, hệ thống của bạn sẽ hoạt động.
+
+Giao diện Streamlit (`frontend`) sẽ có một URL công khai để bạn truy cập.

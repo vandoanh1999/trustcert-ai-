@@ -18,12 +18,19 @@ services:
     envVars:
       # Secrets (Render sẽ hỏi bạn nhập giá trị)
       - key: NEO4J_URI
+        value: ""
       - key: NEO4J_USER
+        value: ""
       - key: NEO4J_PASSWORD
+        value: ""
       - key: QDRANT_URL
+        value: ""
       - key: QDRANT_API_KEY
+        value: ""
       - key: HF_TOKEN
+        value: ""
       - key: API_KEY
+        value: ""
       # Non-secrets (Có giá trị mặc định)
       - key: LOG_LEVEL
         value: INFO
@@ -38,7 +45,7 @@ services:
         fromService:
           type: worker
           name: redis
-          property: url
+          property: connectionString
 
   # --- Các Worker AI/API (Nội bộ) ---
   - type: worker
@@ -48,18 +55,24 @@ services:
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.graph.main:app --timeout 120"
     envVars:
       - key: NEO4J_URI
+        value: ""
       - key: NEO4J_USER
+        value: ""
       - key: NEO4J_PASSWORD
+        value: ""
       - key: QDRANT_URL
+        value: ""
       - key: QDRANT_API_KEY
+        value: ""
       - key: HF_TOKEN
+        value: ""
       - key: EMBEDDING_MODEL_NAME
         value: BAAI/bge-small-en-v1.5
       - key: REDIS_URL
         fromService:
           type: worker
           name: redis
-          property: url
+          property: connectionString
 
   - type: worker
     name: router-service
@@ -68,8 +81,11 @@ services:
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.router.main:app --timeout 120"
     envVars:
       - key: QDRANT_URL
+        value: ""
       - key: QDRANT_API_KEY
+        value: ""
       - key: HF_TOKEN
+        value: ""
       - key: EMBEDDING_MODEL_NAME
         value: BAAI/bge-small-en-v1.5
 
@@ -80,9 +96,13 @@ services:
     startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.gnn.main:app --timeout 120"
     envVars:
       - key: NEO4J_URI
+        value: ""
       - key: NEO4J_USER
+        value: ""
       - key: NEO4J_PASSWORD
+        value: ""
       - key: HF_TOKEN
+        value: ""
       - key: EMBEDDING_MODEL_NAME
         value: BAAI/bge-small-en-v1.5
 
@@ -94,11 +114,17 @@ services:
     startCommand: "celery -A tasks worker --loglevel=info -Q assimilate,default"
     envVars:
       - key: NEO4J_URI
+        value: ""
       - key: NEO4J_USER
+        value: ""
       - key: NEO4J_PASSWORD
+        value: ""
       - key: QDRANT_URL
+        value: ""
       - key: QDRANT_API_KEY
+        value: ""
       - key: HF_TOKEN
+        value: ""
       - key: BASE_MODEL_NAME
         value: meta-llama/Meta-Llama-3-8B-Instruct
       - key: EMBEDDING_MODEL_NAME
@@ -107,9 +133,12 @@ services:
         fromService:
           type: worker
           name: redis
-          property: url
+          property: connectionString
       - key: API_GATEWAY_INTERNAL_URL
-        value: http://gateway:8000
+        fromService:
+          type: web
+          name: gateway
+          property: url
 
   - type: worker
     name: proactive-worker
@@ -118,8 +147,12 @@ services:
     startCommand: "python -m services.proactive.main"
     envVars:
       - key: API_KEY
+        value: ""
       - key: API_GATEWAY_INTERNAL_URL
-        value: http://gateway:8000
+        fromService:
+          type: web
+          name: gateway
+          property: url
 
   # --- Giao diện Frontend ---
   - type: web
@@ -129,7 +162,6 @@ services:
     startCommand: "streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0"
     autoDeploy: true
     envVars:
-      # Service Discovery (Render provides the public URL of the gateway)
       - key: API_GATEWAY_URL
         fromService:
           type: web
