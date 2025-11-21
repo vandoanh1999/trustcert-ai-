@@ -1,165 +1,68 @@
-# render.yaml - Cấu hình triển khai trên Render.com
-# Đã được cập nhật để sử dụng biến môi trường riêng lẻ, giúp đơn giản hóa việc thiết lập.
-services:
-  # --- Dịch vụ Nền ---
-  - type: worker
-    name: redis
-    runtime: docker
-    dockerfilePath: ./dockerfiles/redis.Dockerfile
-    autoDeploy: false
+# render.yaml - TWP-OMEGA-VINFINITY ULTIMATE P2P
+# NO ANCHOR NODES - 100% DECENTRALIZED
+# Chi phi: $0/thang
 
-  # --- Dịch vụ Gateway Công Khai ---
+services:
+  # ============================================
+  # GATEWAY - PUBLIC ENDPOINT (FREE Tier)
+  # ============================================
   - type: web
     name: gateway
     runtime: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -w 4 -k uvicorn.workers.UvicornWorker api.gateway:app --timeout 120"
+    startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker api.gateway:app --timeout 120"
     healthCheckPath: /health
+    plan: free
     envVars:
-      # Secrets (Render sẽ hỏi bạn nhập giá trị)
-      - key: NEO4J_URI
-        value: ""
-      - key: NEO4J_USER
-        value: ""
-      - key: NEO4J_PASSWORD
-        value: ""
-      - key: QDRANT_URL
-        value: ""
-      - key: QDRANT_API_KEY
-        value: ""
+      # FVS P2P Configuration
+      - key: ENABLE_FVS
+        value: "true"
+      - key: FVS_NODE_ID
+        generateValue: true
+      - key: FVS_P2P_PORT
+        value: "8765"
+      - key: FVS_IS_ANCHOR
+        value: "false"
+      - key: FVS_BOOTSTRAP_MODE
+        value: "community"
+      
+      # Embedding Model
       - key: HF_TOKEN
-        value: ""
-      - key: API_KEY
-        value: ""
-      # Non-secrets (Có giá trị mặc định)
-      - key: LOG_LEVEL
-        value: INFO
-      - key: BASE_MODEL_NAME
-        value: meta-llama/Meta-Llama-3-8B-Instruct
+        sync: false
       - key: EMBEDDING_MODEL_NAME
-        value: BAAI/bge-small-en-v1.5
+        value: "BAAI/bge-small-en-v1.5"
       - key: EMBEDDING_MODEL_DIM
-        value: 384
-      # Service Discovery (Render tự động inject)
-      - key: REDIS_URL
-        fromService:
-          type: worker
-          name: redis
-          property: connectionString
-
-  # --- Các Worker AI/API (Nội bộ) ---
-  - type: worker
-    name: graph-service
-    runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.graph.main:app --timeout 120"
-    envVars:
-      - key: NEO4J_URI
-        value: ""
-      - key: NEO4J_USER
-        value: ""
-      - key: NEO4J_PASSWORD
-        value: ""
-      - key: QDRANT_URL
-        value: ""
-      - key: QDRANT_API_KEY
-        value: ""
-      - key: HF_TOKEN
-        value: ""
-      - key: EMBEDDING_MODEL_NAME
-        value: BAAI/bge-small-en-v1.5
-      - key: REDIS_URL
-        fromService:
-          type: worker
-          name: redis
-          property: connectionString
-
-  - type: worker
-    name: router-service
-    runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.router.main:app --timeout 120"
-    envVars:
-      - key: QDRANT_URL
-        value: ""
-      - key: QDRANT_API_KEY
-        value: ""
-      - key: HF_TOKEN
-        value: ""
-      - key: EMBEDDING_MODEL_NAME
-        value: BAAI/bge-small-en-v1.5
-
-  - type: worker
-    name: gnn-service
-    runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker services.gnn.main:app --timeout 120"
-    envVars:
-      - key: NEO4J_URI
-        value: ""
-      - key: NEO4J_USER
-        value: ""
-      - key: NEO4J_PASSWORD
-        value: ""
-      - key: HF_TOKEN
-        value: ""
-      - key: EMBEDDING_MODEL_NAME
-        value: BAAI/bge-small-en-v1.5
-
-  # --- Các Worker Chạy Nền Khác ---
-  - type: worker
-    name: celery-worker
-    runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A tasks worker --loglevel=info -Q assimilate,default"
-    envVars:
-      - key: NEO4J_URI
-        value: ""
-      - key: NEO4J_USER
-        value: ""
-      - key: NEO4J_PASSWORD
-        value: ""
-      - key: QDRANT_URL
-        value: ""
-      - key: QDRANT_API_KEY
-        value: ""
-      - key: HF_TOKEN
-        value: ""
+        value: "384"
       - key: BASE_MODEL_NAME
-        value: meta-llama/Meta-Llama-3-8B-Instruct
-      - key: EMBEDDING_MODEL_NAME
-        value: BAAI/bge-small-en-v1.5
-      - key: REDIS_URL
-        fromService:
-          type: worker
-          name: redis
-          property: connectionString
-      - key: API_GATEWAY_INTERNAL_URL
-        fromService:
-          type: web
-          name: gateway
-          property: url
-
-  - type: worker
-    name: proactive-worker
-    runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python -m services.proactive.main"
-    envVars:
+        value: "meta-llama/Meta-Llama-3-8B-Instruct"
+      
+      # API Security
       - key: API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: "INFO"
+      
+      # Legacy Cloud Fallback (Optional - co the de trong)
+      - key: QDRANT_URL
         value: ""
-      - key: API_GATEWAY_INTERNAL_URL
-        fromService:
-          type: web
-          name: gateway
-          property: url
+      - key: QDRANT_API_KEY
+        value: ""
+      - key: NEO4J_URI
+        value: ""
+      - key: NEO4J_USER
+        value: ""
+      - key: NEO4J_PASSWORD
+        value: ""
 
-  # --- Giao diện Frontend ---
+  # ============================================
+  # FRONTEND - STREAMLIT (FREE Tier)
+  # ============================================
   - type: web
     name: frontend
     runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0"
+    plan: free
     autoDeploy: true
     envVars:
       - key: API_GATEWAY_URL
@@ -167,3 +70,38 @@ services:
           type: web
           name: gateway
           property: url
+
+  # ============================================
+  # P2P BOOTSTRAP NODE (Optional - chi can 1)
+  # Giup mobile nodes tim nhau lan dau
+  # Co the xoa sau khi co du community nodes
+  # ============================================
+  - type: worker
+    name: bootstrap-node
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python -m core.bootstrap_server"
+    plan: free
+    envVars:
+      - key: ENABLE_FVS
+        value: "true"
+      - key: FVS_NODE_ID
+        value: "bootstrap_001"
+      - key: FVS_P2P_PORT
+        value: "8765"
+      - key: BOOTSTRAP_MODE
+        value: "true"
+      - key: HF_TOKEN
+        sync: false
+      - key: EMBEDDING_MODEL_NAME
+        value: "BAAI/bge-small-en-v1.5"
+
+# ============================================
+# KHONG CON CAC SERVICE NAY (DA LOAI BO):
+# - redis (thay bang P2P Gossip)
+# - celery-worker (thay bang DTQ P2P)
+# - graph-service (thay bang FVS local)
+# - router-service (thay bang Profile Router)
+# - gnn-service (thay bang local processing)
+# - anchor-node-1/2 (thay bang Elected Super Nodes)
+# ============================================
