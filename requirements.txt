@@ -15,7 +15,7 @@ gunicorn==22.0.0
 torch==2.4.1
 transformers==4.42.0
 sentence-transformers==3.0.0
-numpy==1.26.0
+numpy==1.24.1
 scikit-learn==1.5.0
 
 # ============================================
