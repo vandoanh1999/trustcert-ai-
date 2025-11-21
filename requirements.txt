@@ -1,38 +1,67 @@
+# TWP-OMEGA-VINFINITY - ULTIMATE P2P REQUIREMENTS
+# Optimized for FREE tier deployment
+
+# ============================================
+# CORE FRAMEWORK
+# ============================================
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
 pydantic==2.8.0
-httpx==0.27.0
-torch==2.3.1  # ← SỬA: Dùng 2.3.1 thay vì >=2.5.0
+gunicorn==22.0.0
+
+# ============================================
+# AI/ML - Lightweight for FREE tier
+# ============================================
+torch==2.3.1
 transformers==4.42.0
 sentence-transformers==3.0.0
-qdrant-client==1.10.0
-redis==5.0.0
-celery[redis]==5.4.0
 numpy==1.26.0
 scikit-learn==1.5.0
-ax-platform==0.3.0
-graphrag==0.1.1  # ← SỬA: Dùng 0.1.1 thay vì 0.1.0
-spacy==3.7.0
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
-# uuid==1.30  # ← XÓA: Built-in library
-# asyncio==3.4.3  # ← XÓA: Built-in library
-peft==0.6.0
-torch-geometric==2.3.0
-neo4j==5.12.0
-feedparser==6.0.10
-pytest==8.2.2
-streamlit==1.36.0
-boto3==1.34.140
-gunicorn==22.0.0
-streamlit-gsheets==0.0.9
-# P2P & Consensus
+
+# ============================================
+# VECTOR STORAGE - LOCAL (Thay Qdrant Cloud)
+# ============================================
 faiss-cpu==1.7.4
+
+# ============================================
+# NETWORKING - P2P
+# ============================================
+httpx==0.27.0
 aiofiles==23.2.1
+websockets==12.0
 
-# Security (MPC/Encryption)
+# ============================================
+# SECURITY - MPC/Encryption
+# ============================================
 cryptography==41.0.7
-pycryptodome==3.19.0
 
-# Optional: Full MPC library (if needed)
-# syft==0.8.5  # PySyft for advanced MPC
-# secretsharing==0.2.6  # Proper Shamir's Secret Sharing
+# ============================================
+# NLP - Graph Extraction
+# ============================================
+spacy==3.7.0
+
+# ============================================
+# FRONTEND
+# ============================================
+streamlit==1.36.0
+
+# ============================================
+# UTILITIES
+# ============================================
+python-dotenv==1.0.0
+pytest==8.2.2
+
+# ============================================
+# REMOVED (Khong can nua):
+# - redis (P2P Gossip thay the)
+# - celery[redis] (DTQ P2P thay the)
+# - qdrant-client (FVS local thay the)
+# - neo4j (Local graph thay the)
+# - graphrag (Custom implementation)
+# - torch-geometric (Simplified GNN)
+# - ax-platform (Khong can HPO)
+# - peft (Khong fine-tune tren FREE tier)
+# - boto3 (Khong dung AWS)
+# - feedparser (Co the them sau)
+# - streamlit-gsheets (Khong can)
+# ============================================
