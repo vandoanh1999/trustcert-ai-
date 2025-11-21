@@ -17,6 +17,7 @@ driver = GraphDatabase.driver(
 
 def write_graph_to_neo4j(tx, nodes, edges, source_id):
     # ... (giữ nguyên logic) ...
+    pass
 
 # ... (các class và endpoint giữ nguyên, nhưng loại bỏ logic Redis) ...
 
