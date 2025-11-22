@@ -14,3 +14,4 @@ pip-selfcheck.json
 dist/
 build/
 *.egg-info/
+*.db

@@ -1,67 +1,14 @@
-# TWP-OMEGA-VINFINITY - ULTIMATE P2P REQUIREMENTS
-# Optimized for FREE tier deployment
-
-# ============================================
-# CORE FRAMEWORK
-# ============================================
-fastapi==0.115.0
-uvicorn[standard]==0.30.0
-pydantic==2.8.0
-gunicorn==22.0.0
-
-# ============================================
-# AI/ML - Lightweight for FREE tier
-# ============================================
-torch==2.4.1
-transformers==4.42.0
-sentence-transformers==3.0.0
-numpy==1.24.1
-scikit-learn==1.5.0
-
-# ============================================
-# VECTOR STORAGE - LOCAL (Thay Qdrant Cloud)
-# ============================================
-faiss-cpu==1.7.4
-
-# ============================================
-# NETWORKING - P2P
-# ============================================
-httpx==0.27.0
-aiofiles==23.2.1
-websockets==12.0
-
-# ============================================
-# SECURITY - MPC/Encryption
-# ============================================
-cryptography==41.0.7
-
-# ============================================
-# NLP - Graph Extraction
-# ============================================
-spacy==3.7.0
-
-# ============================================
-# FRONTEND
-# ============================================
-streamlit==1.36.0
-
-# ============================================
-# UTILITIES
-# ============================================
-python-dotenv==1.0.0
-pytest==8.2.2
-
-# ============================================
-# REMOVED (Khong can nua):
-# - redis (P2P Gossip thay the)
-# - celery[redis] (DTQ P2P thay the)
-# - qdrant-client (FVS local thay the)
-# - neo4j (Local graph thay the)
-# - graphrag (Custom implementation)
-# - torch-geometric (Simplified GNN)
-# - ax-platform (Khong can HPO)
-# - peft (Khong fine-tune tren FREE tier)
-# - boto3 (Khong dung AWS)
-# - feedparser (Co the them sau)
-# - streamlit-gsheets (Khong can)
-# ============================================
+torch>=2.0.0
+transformers>=4.35.0
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.3
+safetensors
+peft>=0.4.0
+bitsandbytes
+fastapi
+uvicorn[standard]
+uvloop
+sqlalchemy
+pydantic
+python-dotenv
+tqdm
