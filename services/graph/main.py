@@ -16,8 +16,24 @@ driver = GraphDatabase.driver(
 )
 
 def write_graph_to_neo4j(tx, nodes, edges, source_id):
-    # ... (giữ nguyên logic) ...
-    pass
+    """
+    Ghi các node và cạnh vào Neo4j bằng một transaction.
+    Sử dụng MERGE để tránh tạo các node/cạnh trùng lặp.
+    """
+    # Tạo hoặc cập nhật các node
+    tx.run("""
+        UNWIND $nodes AS node_name
+        MERGE (n:Node {name: node_name})
+        SET n.source = $source_id
+    """, nodes=nodes, source_id=source_id)
+
+    # Tạo các mối quan hệ
+    for edge in edges:
+        tx.run("""
+            MATCH (a:Node {name: $source_node})
+            MATCH (b:Node {name: $target_node})
+            MERGE (a)-[r:RELATED_TO {type: $rel_type}]->(b)
+        """, source_node=edge['source'], target_node=edge['target'], rel_type=edge['type'])
 
 # ... (các class và endpoint giữ nguyên, nhưng loại bỏ logic Redis) ...
 
