@@ -1,0 +1,8 @@
+{
+  "id": "expert_history_v1",
+  "domain": "history",
+  "description": "Expert adapter for historical facts.",
+  "address": "history_adapter_loc",
+  "tensor_components": 2,
+  "trust_score": 0.88
+}
