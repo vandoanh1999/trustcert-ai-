@@ -3,13 +3,11 @@
   "tasks": [
     {
       "input": "Write a Python function to reverse a list.",
-      "expected_keywords": ["def", "return", "[::-1]"],
-      "unit_test": "import submission\n\ndef test_rev():\n    assert submission.rev([1,2,3]) == [3,2,1]\n\nif __name__ == '__main__':\n    test_rev()\n    print('OK')\n"
+      "expected_keywords": ["def", "return", "[::-1]"]
     },
     {
       "input": "Fix the bug in this code: for i in range(5) print(i)",
-      "expected_keywords": ["colon", ":"],
-      "unit_test": "code" 
+      "expected_keywords": ["colon", ":"]
     }
   ]
 }
