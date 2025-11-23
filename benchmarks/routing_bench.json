@@ -1,0 +1,9 @@
+{
+  "tasks": [
+    {"input": "Implement Dijkstra algorithm in Python", "domain": "code"},
+    {"input": "Compute the derivative of sin(x^2)", "domain": "math"},
+    {"input": "Who was the first emperor of China?", "domain": "history"},
+    {"input": "I have a dataset of sequences like ATG12345, how to analyze?", "domain": "bio"},
+    {"input": "Fix the bug: for i in range(5) print(i)", "domain": "code"}
+  ]
+}
