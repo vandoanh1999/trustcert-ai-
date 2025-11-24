@@ -1,6 +1,3 @@
-# Ignore LoRA model files
-lora_storage/*.safetensors
-
 # Python
 __pycache__/
 *.pyc
@@ -14,4 +11,29 @@ pip-selfcheck.json
 dist/
 build/
 *.egg-info/
+
+# Databases
 *.db
+*.sqlite3
+
+# --- Genesis V4 Artifacts ---
+
+# Ignore trained models
+l2_router_model/
+tools_output/
+output/
+
+# Ignore large model files
+*.gguf
+*.bin
+
+# Ignore synthesized models and other large outputs
+synthesized_*.safetensors
+demo_*.safetensors
+dummy_*.safetensors
+dummy_model.gguf
+dummy_adapters/
+
+# Log files
+*.log
+logs/

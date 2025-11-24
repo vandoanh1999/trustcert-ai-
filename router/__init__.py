@@ -1,1 +1,1 @@
-from .router import SemanticRouter
+from .router import OracleBrain
