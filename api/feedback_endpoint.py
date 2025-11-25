@@ -4,15 +4,12 @@ Genesis Core V7: The Judgement Pillar Feedback Endpoint
 This endpoint allows users to provide feedback on a given dispatch response,
 closing the learning loop for the Aurora Trust reputation system.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Dict
-import uuid
+from typing import List
 
-# In a real application, this would be a persistent database (e.g., Redis, SQL)
-# For this simulation, we'll use a simple in-memory dictionary.
-dispatch_history_db: Dict[str, List[str]] = {}
-
+# V7 Update: Import shared state from the neutral core module
+from core.dispatch_tracker import dispatch_history_db
 from aurora_trust.reputation_vc import update_reputation_with_feedback
 
 router = APIRouter()
@@ -29,23 +26,18 @@ def receive_feedback(dispatch_id: str, feedback: FeedbackInput):
     """
     print(f"--- Received Feedback for Dispatch ID: {dispatch_id} ---")
 
-    # 1. Retrieve the expert IDs associated with this dispatch event.
-    #    In a real system, this would be a lookup in a persistent database.
     if dispatch_id not in dispatch_history_db:
         raise HTTPException(status_code=404, detail="Dispatch ID not found. Cannot process feedback.")
 
     contributing_experts = dispatch_history_db[dispatch_id]
     print(f"Found contributing experts: {contributing_experts}")
 
-    # 2. Apply the feedback to update the reputation of each expert.
-    #    The `update_reputation_with_feedback` function handles the EMA calculation.
     if not contributing_experts:
         return {"status": "feedback_received_no_experts_to_update"}
 
     for expert_id in contributing_experts:
         update_reputation_with_feedback(expert_id, feedback.score)
 
-    # 3. (Future) Log the ground_truth for future fine-tuning or analysis.
     if feedback.ground_truth:
         print(f"Ground truth received for future analysis: '{feedback.ground_truth[:100]}...'")
 
@@ -55,14 +47,6 @@ def receive_feedback(dispatch_id: str, feedback: FeedbackInput):
         "updated_experts": contributing_experts,
         "applied_score": feedback.score
     }
-
-# This is a helper function to be used by the main dispatch endpoint
-# to record which experts were used for a given request.
-def record_dispatch_event(expert_ids: List[str]) -> str:
-    """Creates a unique ID for a dispatch event and records the experts used."""
-    dispatch_id = str(uuid.uuid4())
-    dispatch_history_db[dispatch_id] = expert_ids
-    return dispatch_id
 
 # --- Frontend Simulation Helper Endpoint ---
 class MockDispatchInput(BaseModel):

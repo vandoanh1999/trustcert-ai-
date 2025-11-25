@@ -87,7 +87,7 @@ def run_test():
             # --- Simulate a User Query ---
             print("\n[2] Simulating User Query & Dispatch...")
             # We manually call the part of the method that matters for the feedback loop
-            from api.feedback_endpoint import record_dispatch_event
+            from core.dispatch_tracker import record_dispatch_event
 
             test_instruction = "This is a test."
             expert_ids_for_dispatch = adapter_paths

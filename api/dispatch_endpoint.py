@@ -1,104 +1,63 @@
 """
-Genesis Core V5: The Arbiter Dispatch Endpoint
+Genesis Core V7: The V7 Dispatch Endpoint
 
-This endpoint orchestrates the entire V5 pipeline, now with certification:
-1.  **Oracle Brain:** Get semantic vector and domain probabilities.
-2.  **WeightIndex:** Find best candidate experts.
-3.  **Synthesizer:** Forge a new hybrid expert.
-4.  **(Simulated) Chimera Core:** Generate a response.
-5.  **Arbiter:** Validate, inspect, and certify the final response.
+This is the primary functional endpoint for the Genesis ecosystem.
+It receives a user query, simulates expert selection, and uses the
+Chimera Core to generate a response.
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Dict, List, Any, Optional
+from typing import List, Tuple
 
-from router.router import OracleBrain
-from weightindex.indexer import PersistentIndex
-from synthesizer.main import Synthesizer
-from arbiter import Arbiter, SecurityError
-import os
+from inference.genesis_inference_core import ChimeraCore
 
-# --- V5 Component Initialization ---
 router = APIRouter()
-oracle_brain = OracleBrain()
-index = PersistentIndex()
-synthesizer = Synthesizer()
-arbiter = Arbiter()
 
-# --- API Data Models ---
-class DispatchInput(BaseModel):
-    text: str = Field(..., description="The user's query or instruction.")
-    top_k_experts: int = 2
-    domain_probability_threshold: float = 0.1
+# --- I/O Models ---
+class DispatchRequest(BaseModel):
+    instruction: str = Field(..., description="The user's query or instruction.")
+    # In a real system, the Oracle Brain would determine the experts.
+    # For V7's API, we'll allow the user to specify them for now.
+    expert_adapters: List[str] = Field(..., description="A list of expert adapter paths to consult.")
 
 class DispatchResponse(BaseModel):
-    query: str
-    domain_probabilities: Dict[str, float]
-    selected_candidates: List[Any]
-    simulated_response: str
-    verification_report: Dict[str, Any]
-    trust_certificate: Optional[Dict[str, Any]] = None
+    dispatch_id: str = Field(..., description="The unique ID for this transaction, used for feedback.")
+    response: str = Field(..., description="The generated response from the expert network.")
+
+# --- Endpoint Logic ---
+
+# Initialize the Chimera Core.
+# In a real production app, this would be a singleton managed more carefully.
+# For now, we point it to the dummy model created by setup.sh.
+try:
+    chimera_core = ChimeraCore(base_model_path="dummy_model.gguf", verbose=False)
+except Exception as e:
+    print(f"Warning: Could not initialize ChimeraCore. The API may not function. Error: {e}")
+    chimera_core = None
 
 @router.post("/", response_model=DispatchResponse)
-def dispatch(inp: DispatchInput):
-    print(f"--- V5 Dispatch Request ---")
+async def dispatch_query(request: DispatchRequest):
+    """
+    Processes a user's instruction by dispatching it to the selected experts.
+    """
+    if not chimera_core:
+        raise HTTPException(status_code=503, detail="Inference engine (ChimeraCore) is not available.")
 
-    # --- Arbiter Pre-Check ---
-    # The Arbiter first validates and sanitizes the input prompt
+    if not request.instruction or not request.expert_adapters:
+        raise HTTPException(status_code=400, detail="Instruction and a list of expert_adapters are required.")
+
     try:
-        clean_prompt = arbiter.validator.validate_and_sanitize_prompt(inp.text)
-        print(f"Query '{inp.text}' sanitized and validated.")
-    except SecurityError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
+        # The generate_response method now returns a tuple: (dispatch_id, response_text)
+        dispatch_id, response_text = chimera_core.generate_response(
+            instruction=request.instruction,
+            adapter_paths=request.expert_adapters
+        )
 
-    # 1. Oracle Brain
-    query_vec, domain_probs = oracle_brain.route(clean_prompt)
+        if "Error:" in response_text:
+            raise HTTPException(status_code=500, detail=response_text)
 
-    # 2. WeightIndex
-    all_candidates = []
-    for domain, prob in domain_probs.items():
-        if prob >= inp.domain_probability_threshold:
-            all_candidates.extend(index.search(query_vec, topk=inp.top_k_experts))
+        return DispatchResponse(dispatch_id=dispatch_id, response=response_text)
 
-    unique_candidates = {c['id']: c for c in all_candidates}
-    sorted_candidates = sorted(unique_candidates.values(), key=lambda c: c['similarity'], reverse=True)
-    final_candidates = sorted_candidates[:inp.top_k_experts]
-
-    if not final_candidates:
-        raise HTTPException(status_code=404, detail="No suitable expert adapters found.")
-
-    # 3. Synthesizer
-    adapter_paths = [f"adapters/expert_{c['meta']['domain']}/adapter.safetensors" for c in final_candidates]
-    synthesized_lora = synthesizer.synthesize(adapter_paths)
-    if not synthesized_lora:
-        raise HTTPException(status_code=500, detail="Synthesis of hybrid expert failed.")
-
-    # 4. (Simulated) Chimera Core Inference
-    # In a real system, this would be a call to the ChimeraCore to generate a response.
-    # We will simulate a response for the pipeline.
-    simulated_response = f"This is a simulated response for the query '{clean_prompt}' generated by a hybrid of experts: {[c['id'] for c in final_candidates]}."
-    print("Generated simulated response.")
-
-    # 5. Arbiter Post-Check and Certification
-    # The Arbiter now inspects the response and, if it passes, certifies it.
-    print("Handing response to The Arbiter for inspection and certification...")
-    certification_metadata = {
-        "query": clean_prompt,
-        "synthesized_from": [c['id'] for c in final_candidates],
-        "domain_probabilities": domain_probs
-    }
-    verification_report, certificate = arbiter.inspect_and_certify(
-        prompt=clean_prompt,
-        response=simulated_response,
-        metadata=certification_metadata
-    )
-    print(f"Arbiter verification status: {verification_report['status']}")
-
-    return {
-        "query": clean_prompt,
-        "domain_probabilities": domain_probs,
-        "selected_candidates": final_candidates,
-        "simulated_response": simulated_response,
-        "verification_report": verification_report,
-        "trust_certificate": certificate
-    }
+    except Exception as e:
+        # This will catch errors during the inference process itself.
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during dispatch: {str(e)}")

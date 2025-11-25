@@ -16,8 +16,8 @@ import os
 from llama_cpp import Llama
 from typing import List, Tuple
 
-# V7 - Judgement Pillar Integration
-from api.feedback_endpoint import record_dispatch_event
+# V7 - Decouple API and Inference by using a neutral state manager
+from core.dispatch_tracker import record_dispatch_event
 
 class ChimeraCore:
     _instance = None
