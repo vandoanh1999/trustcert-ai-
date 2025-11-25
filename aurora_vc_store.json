@@ -1,0 +1,38 @@
+[
+  {
+    "credential": {
+      "issuer": "aurora_trust_engine",
+      "issuanceDate": 1764043106,
+      "credentialSubject": {
+        "id": "expert_code_v1",
+        "contributionScore": 0.4642108082771301,
+        "metadata": {
+          "loss_ci": 0.02,
+          "tda_reg": 0.03
+        }
+      }
+    },
+    "proof": {
+      "type": "HmacSha256",
+      "signature": "9024c185bfcbfb56ab82bdd22917b30059babcab2bbc2585f83dee2e74b7b8cf"
+    }
+  },
+  {
+    "credential": {
+      "issuer": "aurora_trust_engine",
+      "issuanceDate": 1764043106,
+      "credentialSubject": {
+        "id": "expert_math_v1",
+        "contributionScore": 0.4863891899585724,
+        "metadata": {
+          "loss_ci": 0.02,
+          "tda_reg": 0.03
+        }
+      }
+    },
+    "proof": {
+      "type": "HmacSha256",
+      "signature": "efdd66976b39ce6913c39131f497d3dac3faccacd48d99196b8507a02489a05f"
+    }
+  }
+]
