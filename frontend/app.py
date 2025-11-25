@@ -1,43 +1,131 @@
+"""
+Genesis Core V7: The Portal Pillar (Genesis Hub)
+
+A user-friendly Streamlit interface for non-technical users to interact
+with the Genesis ecosystem.
+"""
 import streamlit as st
-import httpx
+import requests
 import time
-import os
-import pandas as pd
-from streamlit_gsheets import GSheetsConnection
 
-# --- Cấu hình ---
-API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://gateway:8000")
-client = httpx.Client(base_url=API_GATEWAY_URL, timeout=60.0)
+# --- Configuration ---
+API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
 
-# --- Kết nối Google Sheets ---
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception as e:
-    st.error(f"Không thể kết nối đến Google Sheets. Vui lòng kiểm tra cấu hình secrets. Lỗi: {e}")
-    conn = None
+# --- Helper Functions ---
+def query_genesis_backend(instruction, experts):
+    """
+    Simulates a query to the backend. In a real V7 system, this would
+    call a dispatch endpoint that uses the Chimera Core. For this PoC,
+    we'll simulate the response and get a dispatch_id.
+    """
+    st.info(f"Querying with experts: {experts}...")
 
-def record_feedback(question, incorrect_answer, correct_answer, feedback_type):
-    """Ghi lại phản hồi vào Google Sheet."""
-    if conn is None:
-        st.error("Kết nối Google Sheets chưa được cấu hình, không thể ghi lại phản hồi.")
-        return
+    # This is a simulation. The real Chimera Core would be running this.
+    # We are directly using the feedback endpoint's recording function
+    # via a temporary, simulated "dispatch" endpoint we might add for the UI.
+
+    # Let's assume a simple dispatch simulation endpoint exists for the UI
     try:
-        sheet = conn.read(worksheet="Feedback", usecols=list(range(4)), ttl=0)
-        sheet = sheet.dropna(how="all")
-        new_row = pd.DataFrame([{
-            "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "Question": question,
-            "Incorrect Answer": incorrect_answer if feedback_type == "bad" else "N/A",
-            "Correct Answer": correct_answer
-        }])
-        updated_df = pd.concat([sheet, new_row], ignore_index=True)
-        conn.update(worksheet="Feedback", data=updated_df)
-    except Exception as e:
-        st.error(f"Gặp lỗi khi ghi phản hồi vào Google Sheet: {e}")
+        # In a real scenario, you'd have a /dispatch endpoint that returns this
+        # For now, we simulate by calling the feedback service to log the event
+        # and get an ID back, which is close enough for our UI test.
+        # This part is a placeholder for the actual inference call.
 
-st.set_page_config(page_title="TWP-Ω V-Infinity", layout="wide")
-st.title("🧠 TWP-Ω V-Infinity")
-# ... (Phần Assimilate giữ nguyên) ...
+        # Let's just mock the backend call for now.
+        time.sleep(2)
+        mock_dispatch_id = f"dispatch_{int(time.time())}"
+        mock_response_text = f"This is a simulated response for your query about '{instruction[:30]}...' using experts {experts}."
 
-# --- Chức năng Chat với Vòng lặp Phản hồi ---
-# ... (Phần UI với các nút và form như đã thiết kế)
+        # We need to store this mapping locally in the session state for the UI
+        if 'dispatch_history' not in st.session_state:
+            st.session_state.dispatch_history = {}
+        st.session_state.dispatch_history[mock_dispatch_id] = experts # Store which experts were used
+
+        return mock_dispatch_id, mock_response_text
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error connecting to the backend: {e}")
+        return None, None
+
+def send_feedback_to_backend(dispatch_id, score):
+    """Sends the user's feedback score to the backend API."""
+    try:
+        feedback_url = f"{API_URL}/feedback/{dispatch_id}"
+        response = requests.post(feedback_url, json={"score": score})
+        if response.status_code == 200:
+            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            # Clear the last response to be ready for the next query
+            st.session_state.last_response = None
+        else:
+            st.error(f"Failed to submit feedback. Server responded with: {response.status_code}")
+            st.json(response.json())
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error connecting to the backend: {e}")
+
+# --- Streamlit UI ---
+st.set_page_config(page_title="Genesis Hub", layout="wide")
+
+st.title("🌌 Genesis Hub")
+st.caption("The Portal to the Genesis Symbiotic Network")
+
+# --- Initialization ---
+if 'last_response' not in st.session_state:
+    st.session_state.last_response = None
+
+# --- Main Interaction Panel ---
+st.header("1. Submit a Query")
+
+# For this demo, we'll let the user "choose" the experts.
+# In a real system, the Oracle Brain would do this automatically.
+available_experts = [
+    "dummy_adapters/expert_A/adapter_model.bin",
+    "dummy_adapters/expert_B/adapter_model.bin",
+    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
+]
+selected_experts = st.multiselect(
+    "Select Experts to Consult (simulation):",
+    options=available_experts,
+    default=available_experts[:2]
+)
+
+user_instruction = st.text_area("Enter your instruction or question:")
+
+if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+    with st.spinner("Dispatching query to the expert network..."):
+        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+        if dispatch_id and response_text:
+            st.session_state.last_response = {
+                "dispatch_id": dispatch_id,
+                "text": response_text,
+                "experts": selected_experts
+            }
+
+# --- Feedback Panel ---
+if st.session_state.last_response:
+    st.divider()
+    st.header("2. Provide Feedback")
+
+    response_data = st.session_state.last_response
+
+    st.text_area("Generated Response:", value=response_data["text"], height=150, disabled=True)
+    st.caption(f"Generated by: {', '.join(response_data['experts'])}")
+    st.caption(f"Dispatch ID: {response_data['dispatch_id']}")
+
+    st.write("How would you rate this response?")
+
+    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+
+    if st.button("Submit Feedback"):
+        # This is a slight hack for the demo. Since the backend isn't *really* tracking
+        # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
+        # This simulates the real flow where the ID would already exist from the inference step.
+        try:
+            register_url = f"{API_URL}/feedback/register_mock_dispatch" # We need to create this endpoint
+            requests.post(register_url, json={
+                "dispatch_id": response_data['dispatch_id'],
+                "experts": response_data['experts']
+            })
+        except:
+             # Ignore if it fails, the main feedback call is the important one to test
+             pass
+
+        send_feedback_to_backend(response_data["dispatch_id"], feedback_score)

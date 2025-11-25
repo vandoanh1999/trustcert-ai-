@@ -1,4 +1,4 @@
 {
-  "expert_code_v1": 0.7732105404138565,
-  "expert_math_v1": 0.6243194594979286
+  "dummy_adapters/expert_A/adapter_model.bin": 0.54,
+  "dummy_adapters/expert_B/adapter_model.bin": 0.54
 }

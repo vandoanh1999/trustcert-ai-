@@ -14,7 +14,10 @@ distributed, multi-expert system.
 """
 import os
 from llama_cpp import Llama
-from typing import List
+from typing import List, Tuple
+
+# V7 - Judgement Pillar Integration
+from api.feedback_endpoint import record_dispatch_event
 
 class ChimeraCore:
     _instance = None
@@ -45,13 +48,23 @@ class ChimeraCore:
         self._initialized = True
         print("--- Chimera Core Initialized Successfully ---")
 
-    def generate_response(self, instruction: str, adapter_paths: List[str] = None) -> str:
+    def generate_response(self, instruction: str, adapter_paths: List[str] = None) -> Tuple[str, str]:
         """
         Generates a response by applying one or more LoRA adapters.
         It intelligently handles applying and removing adapters to be efficient.
+
+        V7 Update: Now returns a tuple containing the dispatch_id and the response.
         """
         if adapter_paths is None:
             adapter_paths = []
+
+        # V7 - Judgement Pillar: Record the experts used for this dispatch.
+        # The adapter_paths directly correspond to the experts being consulted.
+        dispatch_id = record_dispatch_event(adapter_paths)
+        print(f"--- Dispatch Event Recorded ---")
+        print(f"  - Dispatch ID: {dispatch_id}")
+        print(f"  - Contributing Experts (Adapters): {adapter_paths}")
+
 
         try:
             # --- The Revolutionary Hot-Swap Logic ---
@@ -82,11 +95,12 @@ class ChimeraCore:
             print("Generating response...")
             output = self.llm(prompt, max_tokens=512, stop=["### Instruction:"], echo=False)
 
-            return output["choices"][0]["text"].strip()
+            response_text = output["choices"][0]["text"].strip()
+            return dispatch_id, response_text
 
         except Exception as e:
             print(f"An error occurred during inference: {e}")
-            return "Error: Could not generate a response."
+            return dispatch_id, "Error: Could not generate a response."
 
     def _reload_adapters(self, new_adapter_paths: List[str]):
         """Helper to reset and apply a new set of adapters."""
