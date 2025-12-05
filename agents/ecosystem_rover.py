@@ -1,119 +1,103 @@
 """
-Genesis Core V7: The Self-Knowledge Pillar (Ecosystem Rover)
+Genesis Core V8: The Self-Growing Ecosystem Rover (Upgraded)
 
 This agent is responsible for proactively discovering new, valuable
-datasets and proposing the creation of new experts to enrich the
-Genesis ecosystem.
+datasets, generating secure proposals, and broadcasting them to the network.
 """
 import os
 import json
 import time
+import hashlib
 from typing import List, Dict, Any
 
+from core.node import DecentralizedNode # V8 Upgrade
+
 # --- Configuration ---
-PROPOSAL_DIR = "expert_proposals"
-SIMULATED_DATA_SOURCES = [
-    "./simulated_data/new_medical_research_2025.json",
-    "./simulated_data/quantum_computing_breakthroughs.txt",
-    "./simulated_data/ancient_history_scrolls_deciphered.csv",
-    "./simulated_data/existing_dataset_finance.csv" # A source that might already be covered
-]
+SIMULATED_DATA_SOURCES = {
+    "https://example.com/new_medical_research_2025.json": '[{"study": "Effect of Compound X", "result": "positive"}]',
+    "https://example.com/quantum_computing_breakthroughs.txt": "A new qubit stabilization technique was discovered.",
+    "https://example.com/ancient_history_scrolls_deciphered.csv": "emperor,reign_start,reign_end\nAugustus,27 BC,14 AD",
+}
 
-# --- Helper Functions ---
-def setup_simulation():
-    """Creates dummy data sources for the rover to discover."""
-    os.makedirs("simulated_data", exist_ok=True)
-    with open(SIMULATED_DATA_SOURCES[0], "w") as f:
-        json.dump([{"study": "Effect of Compound X", "result": "positive"}], f)
-    with open(SIMULATED_DATA_SOURCES[1], "w") as f:
-        f.write("A new qubit stabilization technique was discovered.")
-    with open(SIMULATED_DATA_SOURCES[2], "w") as f:
-        f.write("emperor,reign_start,reign_end\nAugustus,27 BC,14 AD")
-    with open(SIMULATED_DATA_SOURCES[3], "w") as f:
-        f.write("ticker,price\nGEN,100")
-
-def is_topic_already_covered(topic: str, existing_experts: List[str]) -> bool:
-    """
-    A simple simulation to check if a new topic is already covered by
-    existing experts. In a real system, this would involve semantic search.
-    """
-    for expert in existing_experts:
-        if topic in expert:
-            return True
-    return False
-
-# --- Rover Core Logic ---
 class EcosystemRover:
-    def __init__(self, existing_experts: List[str]):
-        self.existing_experts = existing_experts
-        os.makedirs(PROPOSAL_DIR, exist_ok=True)
-        print("🌌 Ecosystem Rover initialized.")
+    def __init__(self, node: DecentralizedNode):
+        self.node = node
+        print(f"🌌 Ecosystem Rover initialized on {self.node.node_id}.")
 
-    def scan_for_new_knowledge(self) -> List[str]:
+    def scan_for_new_knowledge(self) -> Dict[str, str]:
         """
-        Scans simulated data sources for new information.
-        Returns a list of paths to newly discovered, valuable datasets.
+        Scans simulated data sources. In a real system, this would crawl the web.
+        Returns a dictionary of {source_url: content}.
         """
-        print("\n--- Rover starting scan for new knowledge sources... ---")
-        potential_sources = []
-        for source_path in SIMULATED_DATA_SOURCES:
-            if os.path.exists(source_path):
-                # Simple check: does the topic seem new?
-                topic = os.path.basename(source_path).split('.')[0].split('_')[0]
-                if not is_topic_already_covered(topic, self.existing_experts):
-                    print(f"  - Found promising new source: {source_path} (Topic: {topic})")
-                    potential_sources.append(source_path)
-                else:
-                    print(f"  - Skipping source (topic '{topic}' likely covered): {source_path}")
-        return potential_sources
+        print(f"\n[{self.node.node_id}] Rover starting scan for new knowledge sources...")
+        # This is a simulation of discovering new data
+        return SIMULATED_DATA_SOURCES
 
-    def generate_proposal(self, dataset_path: str) -> Dict[str, Any]:
+    def generate_proposal(self, source_url: str, content: str) -> Dict[str, Any]:
         """
-        Analyzes a dataset and generates a formal proposal for creating
-        a new expert.
+        Analyzes a dataset and generates a formal, secure proposal.
         """
-        topic = os.path.basename(dataset_path).split('.')[0]
+        # Item 16: Include hash of dataset and proof-of-source
+        dataset_hash = hashlib.sha256(content.encode('utf8')).hexdigest()
+        topic = source_url.split('/')[-1].split('.')[0].replace('_', ' ')
+
         proposal = {
-            "proposal_id": f"prop_{topic}_{int(time.time())}",
+            "proposal_id": f"prop_{topic.split(' ')[0]}_{int(time.time())}",
             "timestamp": int(time.time()),
-            "source_dataset": dataset_path,
-            "proposed_expert_id": f"expert_{topic}_v1",
-            "justification": f"Dataset at {dataset_path} contains novel information on the topic of '{topic.replace('_', ' ')}'. A specialized expert would improve system performance in this domain.",
-            "status": "pending_review"
+            "proof_of_source": {
+                "url": source_url,
+                "retrieval_timestamp": int(time.time())
+            },
+            "dataset_hash": dataset_hash,
+            "proposed_expert_id": f"expert_{topic.replace(' ', '_')}_v1",
+            "justification": f"Discovered novel information on '{topic}' from a trusted source."
         }
         return proposal
 
-    def save_proposal(self, proposal: Dict[str, Any]):
-        """Saves a proposal to a file for human review."""
-        filename = os.path.join(PROPOSAL_DIR, f"{proposal['proposal_id']}.json")
-        with open(filename, "w") as f:
-            json.dump(proposal, f, indent=2)
-        print(f"  - Saved new expert proposal to: {filename}")
-
-    def run_mission(self):
+    async def run_mission(self):
         """Runs a full discovery-to-proposal mission."""
         new_sources = self.scan_for_new_knowledge()
         if not new_sources:
-            print("--- Mission complete. No new valuable knowledge found this cycle. ---")
+            print(f"[{self.node.node_id}] Mission complete. No new knowledge found.")
             return
 
-        print("\n--- Generating proposals for new experts... ---")
-        for source in new_sources:
-            proposal = self.generate_proposal(source)
-            self.save_proposal(proposal)
+        print(f"[{self.node.node_id}] Generating and broadcasting proposals...")
+        for url, content in new_sources.items():
+            proposal = self.generate_proposal(url, content)
+            print(f"  - Broadcasting proposal: {proposal['proposal_id']}")
+            # Use the node's broadcast capability to send a signed message
+            await self.node.broadcast_message("NEW_EXPERT_PROPOSAL", proposal)
 
-        print("--- Mission complete. New expert proposals are ready for review. ---")
+# --- Self-Test ---
+async def main():
+    from core.p2p import P2PNetwork
+    print("--- Running Upgraded Ecosystem Rover Self-Test ---")
 
-# --- Example Execution ---
+    network = P2PNetwork()
+    # The Rover will run on a standard Ephemeral node
+    rover_node = DecentralizedNode(network.add_node())
+    rover = EcosystemRover(rover_node)
+
+    # Create a listener node to verify the broadcast
+    listener_node = DecentralizedNode(network.add_node())
+    received_proposals = []
+    async def handle_msg(sender, msg):
+        if msg['payload']['type'] == "NEW_EXPERT_PROPOSAL":
+            received_proposals.append(msg['payload']['data'])
+    listener_node.p2p.register_handler(handle_msg)
+
+    await rover.run_mission()
+    await asyncio.sleep(0.01) # Allow gossip to propagate
+
+    assert len(received_proposals) == len(SIMULATED_DATA_SOURCES)
+    first_proposal = received_proposals[0]
+    assert 'dataset_hash' in first_proposal
+    assert 'proof_of_source' in first_proposal
+    assert 'url' in first_proposal['proof_of_source']
+
+    print("\n[PASS] Rover mission completed and broadcasted secure proposals successfully.")
+    print(f"  - Example proposal received by listener: {json.dumps(first_proposal, indent=2)}")
+
 if __name__ == "__main__":
-    print("--- Running a manual Ecosystem Rover mission ---")
-    setup_simulation()
-
-    # Simulate the current state of the network
-    current_experts = [
-        "expert_finance_v2",
-        "expert_legal_v1"
-    ]
-
-    rover = EcosystemRover(existing_experts=current_experts)
-    rover.run_mission()
+    import asyncio
+    asyncio.run(main())

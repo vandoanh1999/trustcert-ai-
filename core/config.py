@@ -1,70 +1,31 @@
-# core/config.py - Configuration Settings
-import os
-from functools import lru_cache
-from pydantic_settings import BaseSettings
-from typing import Optional, List
+"""
+Genesis Core V8: Centralized Configuration
 
-class Settings(BaseSettings):
-    """Application settings with FVS P2P support"""
-    
-    # ============================================
-    # FVS P2P Configuration (NEW)
-    # ============================================
-    ENABLE_FVS: bool = True
-    FVS_NODE_ID: Optional[str] = None
-    FVS_P2P_PORT: int = 8765
-    FVS_IS_ANCHOR: bool = False
-    FVS_BOOTSTRAP_MODE: str = "community"
-    FVS_BOOTSTRAP_PEERS: str = ""
-    FVS_RELAY_NODES: str = ""
-    FVS_DATA_DIR: str = "./data/fvs"
-    
-    # ============================================
-    # AI Models
-    # ============================================
-    HF_TOKEN: Optional[str] = None
-    EMBEDDING_MODEL_NAME: str = "BAAI/bge-small-en-v1.5"
-    EMBEDDING_MODEL_DIM: int = 384
-    BASE_MODEL_NAME: str = "meta-llama/Meta-Llama-3-8B-Instruct"
-    
-    # ============================================
-    # API Security
-    # ============================================
-    API_KEY: Optional[str] = None
-    LOG_LEVEL: str = "INFO"
-    
-    # ============================================
-    # Legacy Cloud (Fallback - Optional)
-    # ============================================
-    QDRANT_URL: Optional[str] = None
-    QDRANT_API_KEY: Optional[str] = None
-    NEO4J_URI: Optional[str] = None
-    NEO4J_USER: Optional[str] = None
-    NEO4J_PASSWORD: Optional[str] = None
-    REDIS_URL: Optional[str] = None
-    
-    class Config:
-        env_file = ".env"
-        extra = "allow"
-    
-    def get_bootstrap_peers(self) -> List[str]:
-        """Parse bootstrap peers from env"""
-        if not self.FVS_BOOTSTRAP_PEERS:
-            return []
-        return [p.strip() for p in self.FVS_BOOTSTRAP_PEERS.split(",") if p.strip()]
-    
-    def get_relay_nodes(self) -> List[tuple]:
-        """Parse relay nodes from env"""
-        if not self.FVS_RELAY_NODES:
-            return []
-        nodes = []
-        for node in self.FVS_RELAY_NODES.split(","):
-            if ":" in node:
-                ip, port = node.strip().split(":")
-                nodes.append((ip, int(port)))
-        return nodes
+This file consolidates all network parameters, thresholds, and magic numbers
+for easy tuning and maintenance.
+"""
 
-@lru_cache()
-def get_settings() -> Settings:
-    """Get cached settings instance"""
-    return Settings()
+# --- API Configuration ---
+API_REQUEST_WINDOW_SECONDS = 60
+API_MAX_REQUESTS_PER_WINDOW = 50
+
+# --- Node & Tier Thresholds ---
+NODE_SUPER_NODE_TRUST_THRESHOLD = 0.75
+NODE_STABLE_CONTRIBUTION_THRESHOLD = 10.0
+NODE_SUPER_NODE_VOTE_THRESHOLD_PERCENT = 0.6
+NODE_MIN_SUPER_NODES_FOR_MPC = 3
+
+# --- User & Tier Thresholds ---
+USER_STABLE_CONTRIBUTION_THRESHOLD = 10.0
+USER_VIP_PRO_CONTRIBUTION_THRESHOLD = 100.0
+USER_HIGH_QUALITY_FEEDBACK_BONUS = 0.05
+
+# --- Cryptography & Security ---
+VC_SIGNING_KEY = b"genesis_v8_decentralized_network_key"
+REPUTATION_EMA_LEARNING_RATE = 0.1
+
+# --- P2P Network ---
+# (No configurable constants for the simulation yet)
+
+# --- Ecosystem Rover & Training ---
+# (No configurable constants for the simulation yet)

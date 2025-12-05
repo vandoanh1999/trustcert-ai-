@@ -6,9 +6,10 @@ help:
 	@echo "Available commands:"
 	@echo "  install    - Install Python dependencies"
 	@echo "  setup      - Run the initial setup script to create dummy data"
-	@echo "  run        - Run the main FastAPI server for the V7 API"
+	@echo "  run        - Run the main FastAPI server for the V8 API"
 	@echo "  demo       - Run the Streamlit UI for the Genesis Hub"
-	@echo "  ci         - Run the V7 integration self-test"
+	@echo "  dashboard  - Run the live network monitoring dashboard"
+	@echo "  ci         - Run all V8 integration self-tests"
 
 install:
 	pip install -r requirements.txt
@@ -22,5 +23,14 @@ run:
 demo:
 	streamlit run frontend/app.py
 
+dashboard:
+	streamlit run frontend/dashboard.py
+
 ci:
-	python3 ci/selftest.py
+	@echo "--- Running V8 Core Security Self-Test ---"
+	python3 core/security.py
+	@echo "\n--- Running V8 Decentralized Network Self-Test ---"
+	python3 ci/v8_decentralized_test.py
+	@echo "\n--- Running V8 Anti-Sybil Self-Test ---"
+	python3 ci/v8_sybil_test.py
+	@echo "\n--- All Tests Passed! ---"

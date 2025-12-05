@@ -1,135 +1,91 @@
-# 🌌 Genesis Core V7 - The Symbiotic Network
+# 🌌 Genesis Core V8 - The "Bittensor-Lite" Ecosystem
 
-**Genesis is a self-sustaining, decentralized AI ecosystem designed to autonomously grow, learn, and improve through user interaction and self-discovery.**
+**Genesis is a decentralized, self-sustaining AI network designed to be 100x lighter than Bittensor, with a built-in trust and certification layer.**
 
-This project has evolved beyond a simple "Mixture of Experts" into a "Symbiotic Network." It features a revolutionary architecture where user feedback directly shapes the system's knowledge and a proactive agent seeks out new information to expand its own capabilities.
-
----
-
-## ✨ Core Features
-
-*   **🧠 The Three Pillars of V7:**
-    1.  **Portal Pillar (Genesis Hub):** A user-friendly Streamlit interface for anyone to interact with the AI, submit queries, and provide feedback.
-    2.  **Judgement Pillar (Feedback Loop):** A robust API backend that processes user feedback to dynamically update the reputation and trustworthiness of its AI experts using an Exponential Moving Average (EMA).
-    3.  **Self-Knowledge Pillar (Ecosystem Rover):** An autonomous agent that scans for new data sources and proactively proposes the creation of new specialized experts, enabling the system to grow its own knowledge base.
-*   **🚀 High-Performance Inference:** Powered by the `ChimeraCore`, which uses `llama-cpp` for efficient GGUF model loading and dynamic LoRA adapter hot-swapping.
-*   **信頼 Aurora Trust System:** A sophisticated reputation engine that manages expert scores and forms the foundation of the system's learning and self-regulation.
-*   **🔧 Simplified Onboarding:** Get up and running in minutes with a simple setup script and a `Makefile` for common tasks.
+This is not just a Mixture-of-Experts; it's a **Symbiotic Network**. It combines a high-performance inference core with a decentralized P2P layer where nodes collaborate, vote on new AI models, and earn reputation through a trustless, verifiable system.
 
 ---
 
-## 🏛️ V7 Architecture: The Symbiotic Network
+## ✨ Vision: Bittensor, but Lean and Verifiable
 
-The V7 architecture is designed as a closed-loop system where user interaction and autonomous discovery work together to create an ever-evolving intelligence.
+*   **Feather-Light Decentralization:** Where Bittensor requires massive compute and complex blockchain mechanics, Genesis uses a lightweight P2P gossip network and hardware-based identity to achieve consensus and security with minimal overhead.
+*   **Built-in Trust:** The **Aurora Trust Engine** is a first-class citizen. User feedback and node contributions directly translate into verifiable credentials (VCs) and reputation scores, ensuring that only high-quality actors (both human and AI) can thrive.
+*   **Autonomous Growth:** The network is designed to grow itself. An **Ecosystem Rover** agent discovers new knowledge, proposes new AI experts, and the network's trusted "Super Nodes" vote to approve and auto-deploy them.
+
+---
+
+## 🏛️ V8 Architecture: A Hardened, Decentralized Network
+
+The V8 architecture is a closed-loop system hardened against attacks and designed for autonomous, decentralized operation.
 
 ```mermaid
 graph TD
-    subgraph User Interaction Loop
-        User -- "Query & Feedback" --> Portal[<B>Portal Pillar</B><br>Genesis Hub UI];
-        Portal -- "1. User Submits Query" --> Inference[<B>Inference Core</B><br>Dispatches to Experts];
-        Inference -- "2. Generates Response & Dispatch ID" --> Portal;
-        Portal -- "3. User Submits Feedback" --> Judgement[<B>Judgement Pillar</B><br>Feedback API];
-        Judgement -- "4. Updates Reputation" --> AuroraTrust[<B>Aurora Trust</B><br>Reputation Database];
+    subgraph "Core Network & Security"
+        A[User] -- Query --> Hub(Genesis Hub UI);
+        Hub -- Signed Request --> API[FastAPI w/ Rate Limiting];
+        API -- P-RAG Dispatch --> Router[<B>Personalized Router</B>];
+        Router -- Selects Nodes based on User Tier --> P2P;
+        P2P(P2P Gossip Network);
+        P2P -- Distributes Tasks --> Nodes[Decentralized Nodes];
     end
 
-    subgraph Autonomous Expansion Loop
-        Rover[<B>Self-Knowledge Pillar</B><br>Ecosystem Rover] -- "Scans for new information" --> Data[(External Data Sources)];
-        Rover -- "Creates Proposal for Human Review" --> Proposals[New Expert Proposals];
+    subgraph "Node Internals (Hardened)"
+        Nodes -- <B>ChimeraCore</B> for Inference --> LoRA(Hot-Swappable LoRA Experts);
+        Nodes -- Identity --> HWID{Hardware Fingerprint};
+        HWID -- Generates --> ECDSA(ECDSA Keys);
+        Nodes -- Shares Secrets via --> SSS(Shamir's Secret Sharing);
     end
 
-    style User fill:#d4edda,stroke:#c3e6cb
-    style Portal fill:#f8d7da,stroke:#f5c6cb
-    style Inference fill:#cce5ff,stroke:#b8daff
-    style Judgement fill:#cce5ff,stroke:#b8daff
-    style AuroraTrust fill:#fff3cd,stroke:#ffeeba
-    style Rover fill:#e2e3e5,stroke:#d6d8db
+    subgraph "Autonomous Growth & Trust Loop"
+        User -- Feedback --> API;
+        API -- Updates Reputation --> Aurora(<B>Aurora Trust Engine</B>);
+        Aurora -- Issues VCs & Trust Scores --> Nodes;
+        Rover(Ecosystem Rover) -- Discovers Data --> External;
+        Rover -- Proposes New Expert --> P2P;
+        SuperNodes -- Vote to Approve --> P2P;
+        P2P -- Triggers Training --> Trainer(Simulated LoRA Trainer);
+        Trainer -- Deploys New Expert --> LoRA;
+    end
+
+    style User fill:#d4edda
+    style Hub fill:#f8d7da
+    style SuperNodes fill:#fff3cd
 ```
-
----
-
-## 🖥️ The Genesis Hub in Action
-
-The Portal Pillar provides a clean and intuitive interface for users to leverage the power of the Genesis network.
-
-![Genesis Hub User Interface](docs/images/genesis_hub_ui.png)
 
 ---
 
 ## 🚀 Getting Started
 
-Setting up the Genesis Core V7 environment is straightforward.
-
-### 1. Prerequisites
-
-*   Python 3.10+
-*   `pip` and `venv`
-
-### 2. Installation & Setup
-
-A simple `Makefile` command handles everything from dependency installation to setting up the dummy environment needed for testing.
-
 ```bash
-# 1. Clone the repository
-git clone <repository_url>
-cd <repository_directory>
+# 1. Install all dependencies (Python packages)
+make install
 
-# 2. Run the all-in-one setup command
+# 2. Run the one-time setup to create dummy data and configs
 make setup
-```
 
-This command will:
-*   Install all required Python packages from `requirements.txt`.
-*   Run the `setup.sh` script to create the necessary dummy models, adapters, and configuration files for the system to run.
-
----
-
-## ⚙️ How to Use Genesis
-
-### Running the System
-
-The core of the system is the FastAPI backend and the Streamlit frontend.
-
-**1. Start the Backend API Server:**
-The API server handles feedback and other core functions.
-```bash
-# To be implemented - running the FastAPI app
-# For now, the API is tested via the self-test script.
-```
-*Note: A future update will include a `make run-api` command.*
-
-**2. Launch the Genesis Hub UI:**
-Start the Streamlit application to interact with the system.
-
-```bash
-make demo
-```
-This will launch the web interface, typically at `http://localhost:8501`.
-
-### Running the Self-Test
-
-To verify that all components of the V7 architecture are working correctly, run the full integration self-test.
-
-```bash
+# 3. Run all CI self-tests to verify the system is working
 make ci
 ```
-This will execute the script in `ci/selftest.py`, which simulates a full user query and feedback loop, ensuring the reputation engine is functioning as expected.
+
+## ⚙️ Running the Ecosystem
+
+*   **Run the Genesis Hub UI (for users):**
+    ```bash
+    make demo
+    ```
+*   **Run the Live Network Dashboard (for operators):**
+    ```bash
+    make dashboard
+    ```
+*   **Run the API Server (in a separate terminal):**
+    ```bash
+    make run
+    ```
 
 ---
 
-## 📁 Project Structure
+##  license
 
-The repository is organized into the following key directories:
-
-```
-.
-├── agents/             # Autonomous agents (e.g., EcosystemRover)
-├── api/                # FastAPI application for the backend
-├── aurora_trust/       # The core reputation and VC engine
-├── ci/                 # Continuous integration and self-test scripts
-├── docs/               # Documentation and images
-├── frontend/           # The Streamlit UI application
-├── inference/          # The ChimeraCore for model inference
-├── tools/              # Helper scripts (e.g., expert builder)
-├── Makefile            # Convenience commands for setup, testing, etc.
-└── setup.sh            # Script to initialize the dummy environment
-```
+This project operates under a dual-license model:
+*   **Source-Available License:** Running a node for personal use or to participate in the network is permitted under the terms in `LICENSE`.
+*   **Commercial License:** Enterprises wishing to use the Genesis Core for commercial purposes must obtain a separate license. See `LICENSE_COMMERCIAL.md` for details.
