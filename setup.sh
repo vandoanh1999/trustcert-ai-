@@ -1,67 +1,29 @@
 #!/bin/bash
+# Genesis Core V9 - Setup Script
 
-# This script sets up the initial environment for Genesis Core V2
-# by creating valid dummy adapters and ingesting them.
+echo "--- Setting up Genesis Core V9 Environment ---"
 
-echo "[*] Creating directories for demo adapters..."
-mkdir -p adapters/expert_math adapters/expert_code adapters/expert_history
+# 1. Create dummy adapter directories
+echo "\n[1] Creating dummy adapter directories..."
+mkdir -p dummy_adapters/expert_A
+mkdir -p dummy_adapters/expert_B
+mkdir -p dummy_adapters/expert_C
 
-echo "[*] Creating demo adapter metadata files..."
-cat <<EOF > adapters/expert_math/metadata.json
-{
-  "id": "expert_math_v1",
-  "domain": "math",
-  "description": "Expert adapter for mathematical reasoning.",
-  "address": "math_adapter_loc",
-  "tensor_components": 3,
-  "trust_score": 0.95
-}
-EOF
+# 2. Check for the real LLM model
+MODEL_NAME="Phi-3-mini-4k-instruct-q4.gguf"
+if [ ! -f "$MODEL_NAME" ]; then
+    echo "\n[2] Base model '$MODEL_NAME' not found."
+    echo "    Please download it from Hugging Face:"
+    echo "    wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/$MODEL_NAME"
+    # In a real CI/CD, you might want to exit here, but for local dev we can continue
+else
+    echo "\n[2] Base model '$MODEL_NAME' found."
+fi
 
-cat <<EOF > adapters/expert_code/metadata.json
-{
-  "id": "expert_code_v1",
-  "domain": "code",
-  "description": "Expert adapter for Python code generation.",
-  "address": "code_adapter_loc",
-  "tensor_components": 4,
-  "trust_score": 0.92
-}
-EOF
+# 3. Create initial reputation and VC databases (as empty JSON files)
+echo "\n[3] Initializing decentralized storage files (will be replaced by DHT)..."
+echo "{}" > aurora_reputation.json
+echo "[]" > aurora_vc_store.json
 
-cat <<EOF > adapters/expert_history/metadata.json
-{
-  "id": "expert_history_v1",
-  "domain": "history",
-  "description": "Expert adapter for historical facts.",
-  "address": "history_adapter_loc",
-  "tensor_components": 2,
-  "trust_score": 0.88
-}
-EOF
-
-echo "[*] Creating VALID dummy tensor files for demo adapters..."
-# Use python to create small but valid safetensors files
-python3 -c "
-import numpy as np
-from safetensors.numpy import save_file
-import os
-
-files_to_create = {
-    'adapters/expert_math/adapter.safetensors': {'layer1': np.random.rand(16,32).astype('float32')},
-    'adapters/expert_code/adapter.safetensors': {'layer1': np.random.rand(16,32).astype('float32')},
-    'adapters/expert_history/adapter.safetensors': {'layer1': np.random.rand(16,32).astype('float32')}
-}
-
-for path, tensors in files_to_create.items():
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    save_file(tensors, path)
-    print(f'  - Created {path}')
-"
-
-echo "[*] Ingesting adapters into the WeightIndex..."
-# Make sure PYTHONPATH is set so scripts can find modules
-export PYTHONPATH=.
-python3 scripts/ingest_adapters.py
-
-echo "[*] Setup complete. You can now run the demo or start the server."
+echo "\n--- Setup Complete ---"
+echo "You can now run the system using the 'make' commands (e.g., 'make ci', 'make demo')."
