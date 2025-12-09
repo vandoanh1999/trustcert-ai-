@@ -37,3 +37,4 @@ dummy_adapters/
 # Log files
 *.log
 logs/
+\n# Ignore private key files\n*.pem

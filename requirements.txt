@@ -13,3 +13,7 @@ accelerate
 bitsandbytes
 llama-cpp-python
 scikit-learn
+
+# P2P Networking
+trio
+secp256k1
