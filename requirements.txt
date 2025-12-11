@@ -17,3 +17,5 @@ scikit-learn
 # P2P Networking
 trio
 secp256k1
+torch
+numpy
