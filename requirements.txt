@@ -18,3 +18,4 @@ scikit-learn
 trio
 secp256k1
 kademlia
+scipy
