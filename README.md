@@ -67,20 +67,17 @@ make setup
 make ci
 ```
 
-## ⚙️ Running the Ecosystem
+## ⚙️ Running the End-to-End Demonstration
 
-*   **Run the Genesis Hub UI (for users):**
-    ```bash
-    make demo
-    ```
-*   **Run the Live Network Dashboard (for operators):**
-    ```bash
-    make dashboard
-    ```
-*   **Run the API Server (in a separate terminal):**
-    ```bash
-    make run
-    ```
+To see the complete, decentralized system in action, run the demonstration script. This will simulate a multi-node network where experts are registered, training jobs are distributed, and user queries are intelligently routed.
+
+```bash
+# Ensure all dependencies are installed
+pip install -r requirements.txt
+
+# Run the demonstration
+python3 demonstration.py
+```
 
 ---
 

@@ -17,3 +17,4 @@ scikit-learn
 # P2P Networking
 trio
 secp256k1
+kademlia

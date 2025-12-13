@@ -1,13 +1,13 @@
+from pydantic import BaseModel
 import numpy as np
 from typing import List, Dict
 
-# Placeholder for real node and user data
-class Node:
-    def __init__(self, peer_id: str, reputation: float, expertise: np.ndarray, latency: float):
-        self.peer_id = peer_id
-        self.reputation = reputation
-        self.expertise = expertise  # A vector representing the node's expertise
-        self.latency = latency
+# Use Pydantic for automatic validation and serialization
+class Node(BaseModel):
+    peer_id: str
+    reputation: float
+    expertise: List[float]  # Use a list for JSON compatibility
+    latency: float
 
 class User:
     def __init__(self, user_id: str, tier: str = "standard"):
@@ -22,10 +22,11 @@ class PersonalizedRouter:
     def __init__(self, nodes: List[Node]):
         self.nodes = {node.peer_id: node for node in nodes}
         # Tier-based weights: [reputation, semantic_similarity, 1/latency]
+        # Semantic similarity should be the most important factor.
         self.tier_weights = {
-            "free": np.array([0.4, 0.4, 0.2]),
-            "standard": np.array([0.5, 0.3, 0.2]),
-            "premium": np.array([0.6, 0.2, 0.2]),
+            "free": np.array([0.3, 0.5, 0.2]),
+            "standard": np.array([0.2, 0.6, 0.2]),
+            "premium": np.array([0.1, 0.7, 0.2]),
         }
 
     def _cosine_similarity(self, v1: np.ndarray, v2: np.ndarray) -> float:
@@ -51,8 +52,9 @@ class PersonalizedRouter:
         node_list = list(self.nodes.values())
 
         for node in node_list:
-            # 1. Calculate semantic similarity
-            semantic_similarity = self._cosine_similarity(query_embedding, node.expertise)
+            # 1. Calculate semantic similarity (convert list to numpy array)
+            expertise_vector = np.array(node.expertise)
+            semantic_similarity = self._cosine_similarity(query_embedding, expertise_vector)
 
             # 2. Get reputation and latency
             reputation = node.reputation
@@ -82,9 +84,9 @@ if __name__ == '__main__':
     # --- Example Usage ---
     # Create some dummy nodes
     nodes = [
-        Node("node_A", 0.9, np.array([0.8, 0.2, 0.1]), 50), # High rep, good match
-        Node("node_B", 0.7, np.array([0.1, 0.9, 0.2]), 100), # Lower rep, bad match
-        Node("node_C", 0.8, np.array([0.7, 0.3, 0.1]), 20), # Good rep, good match, low latency
+        Node(peer_id="node_A", reputation=0.9, expertise=[0.8, 0.2, 0.1], latency=50), # High rep, good match
+        Node(peer_id="node_B", reputation=0.7, expertise=[0.1, 0.9, 0.2], latency=100), # Lower rep, bad match
+        Node(peer_id="node_C", reputation=0.8, expertise=[0.7, 0.3, 0.1], latency=20), # Good rep, good match, low latency
     ]
 
     # Create a router

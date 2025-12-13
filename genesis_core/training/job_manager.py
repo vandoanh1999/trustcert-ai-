@@ -2,18 +2,7 @@ import json
 from pydantic import BaseModel
 from typing import Dict, Any
 
-# Placeholder for a real DHT client
-class MockDHTClient:
-    def __init__(self):
-        self.store = {}
-
-    async def set(self, key: str, value: str):
-        print(f"[DHT] Setting key '{key}'")
-        self.store[key] = value
-
-    async def get(self, key: str):
-        print(f"[DHT] Getting key '{key}'")
-        return self.store.get(key)
+from genesis_core.dht.network import KademliaNode
 
 class TrainingJob(BaseModel):
     """
@@ -28,8 +17,8 @@ class JobPublisher:
     """
     Publishes new training jobs to the DHT.
     """
-    def __init__(self, dht_client: MockDHTClient):
-        self.dht = dht_client
+    def __init__(self, dht_node: KademliaNode):
+        self.dht = dht_node
 
     async def publish_job(self, job: TrainingJob):
         """
@@ -44,8 +33,8 @@ class JobSubscriber:
     """
     Subscribes to and processes new training jobs from the DHT.
     """
-    def __init__(self, dht_client: MockDHTClient):
-        self.dht = dht_client
+    def __init__(self, dht_node: KademliaNode):
+        self.dht = dht_node
 
     async def get_job(self, job_id: str) -> TrainingJob:
         """
@@ -63,10 +52,16 @@ if __name__ == '__main__':
 
     async def main():
         # --- Example Usage ---
-        dht_client = MockDHTClient()
+        # Create two nodes
+        node1 = KademliaNode(host="127.0.0.1", port=8468)
+        node2 = KademliaNode(host="127.0.0.1", port=8469)
 
-        # 1. A Super Node publishes a new job
-        publisher = JobPublisher(dht_client)
+        # Start the nodes
+        await node1.start()
+        await node2.start(bootstrap_nodes=[("127.0.0.1", 8468)])
+
+        # 1. A Super Node (node1) publishes a new job
+        publisher = JobPublisher(node1)
         new_job = TrainingJob(
             job_id="lora_expert_crypto_v1",
             dataset_url="s3://genesis-datasets/crypto_news_2024.csv",
@@ -75,8 +70,8 @@ if __name__ == '__main__':
         )
         await publisher.publish_job(new_job)
 
-        # 2. A Training Node subscribes to the job
-        subscriber = JobSubscriber(dht_client)
+        # 2. A Training Node (node2) subscribes to the job
+        subscriber = JobSubscriber(node2)
         retrieved_job = await subscriber.get_job("lora_expert_crypto_v1")
 
         if retrieved_job:
@@ -85,8 +80,11 @@ if __name__ == '__main__':
             print(f"Dataset: {retrieved_job.dataset_url}")
             print(f"Model Base: {retrieved_job.model_base}")
             print(f"Hyperparameters: {retrieved_job.hyperparameters}")
-            # Here, the training node would kick off the actual training process
         else:
             print("Job not found.")
+
+        # Stop the nodes
+        node1.stop()
+        node2.stop()
 
     asyncio.run(main())
