@@ -17,14 +17,28 @@ VC_STORE_PATH = "aurora_vc_store.json"
 
 # --- Reputation Management ---
 
+# Bolt Optimization: In-memory cache for reputation database to reduce disk I/O.
+_reputation_cache: Dict[str, float] = None
+
 def load_reputation_db() -> Dict[str, float]:
+    global _reputation_cache
+    if _reputation_cache is not None:
+        return _reputation_cache
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
-    return {}
+            try:
+                _reputation_cache = json.load(f)
+                return _reputation_cache
+            except json.JSONDecodeError:
+                _reputation_cache = {}
+                return _reputation_cache
+    _reputation_cache = {}
+    return _reputation_cache
 
 def save_reputation_db(db: Dict[str, float]):
+    global _reputation_cache
+    _reputation_cache = db
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
