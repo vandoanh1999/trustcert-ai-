@@ -15,16 +15,32 @@ from core.config import *
 REP_DB_PATH = "aurora_reputation.json"
 VC_STORE_PATH = "aurora_vc_store.json"
 
+# --- Caches ---
+# Bolt ⚡: Using in-memory caches to eliminate redundant disk I/O and JSON parsing.
+_REP_CACHE = None
+_VC_CACHE = None
+
 # --- Reputation Management ---
 
 def load_reputation_db() -> Dict[str, float]:
+    global _REP_CACHE
+    if _REP_CACHE is not None:
+        return _REP_CACHE
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
-    return {}
+            try:
+                _REP_CACHE = json.load(f)
+                return _REP_CACHE
+            except json.JSONDecodeError:
+                _REP_CACHE = {}
+                return _REP_CACHE
+    _REP_CACHE = {}
+    return _REP_CACHE
 
 def save_reputation_db(db: Dict[str, float]):
+    global _REP_CACHE
+    _REP_CACHE = db
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
@@ -47,6 +63,7 @@ def sign_payload_hmac(payload: bytes) -> str:
     return hmac.new(VC_SIGNING_KEY, payload, digestmod=hashlib.sha256).hexdigest()
 
 def issue_vc(subject_id: str, credential_type: str, details: Dict[str, Any]) -> Dict[str, Any]:
+    global _VC_CACHE
     vc = {
         "issuer": "aurora_trust_engine_v8",
         "issuanceDate": int(time.time()),
@@ -57,11 +74,19 @@ def issue_vc(subject_id: str, credential_type: str, details: Dict[str, Any]) -> 
     signature = sign_payload_hmac(payload)
     vc_obj = {"credential": vc, "proof": {"type": "HmacSha256", "signature": signature}}
 
-    store = []
-    if os.path.exists(VC_STORE_PATH):
-        with open(VC_STORE_PATH, "r") as f: store = json.load(f)
-    store.append(vc_obj)
-    with open(VC_STORE_PATH, "w") as f: json.dump(store, f, indent=2)
+    if _VC_CACHE is None:
+        if os.path.exists(VC_STORE_PATH):
+            with open(VC_STORE_PATH, "r") as f:
+                try:
+                    _VC_CACHE = json.load(f)
+                except json.JSONDecodeError:
+                    _VC_CACHE = []
+        else:
+            _VC_CACHE = []
+
+    _VC_CACHE.append(vc_obj)
+    with open(VC_STORE_PATH, "w") as f:
+        json.dump(_VC_CACHE, f, indent=2)
     return vc_obj
 
 def issue_tier_credential(user_id: str, tier: str, contribution_score: float) -> Dict[str, Any]:
