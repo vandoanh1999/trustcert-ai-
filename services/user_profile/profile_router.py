@@ -2,6 +2,9 @@ from enum import Enum
 from dataclasses import dataclass
 import time
 import logging
+import hashlib
+import numpy as np
+from typing import List, Dict, Set, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ class UserProfile:
     last_active: float
     
     # Pre-fetch optimization
-    pre_computed_topics: Set[str] = None
+    pre_computed_topics: Optional[Set[str]] = None
     cache_hit_rate: float = 0.0
 
 class ProfileBasedRouter:
@@ -81,10 +84,15 @@ class ProfileBasedRouter:
         
         for super_node in super_nodes:
             try:
-                node_results = await self.p2p.query_specific_peer(
-                    super_node, query_embedding, top_k
-                )
-                results.extend(node_results)
+                # Use send_and_wait for query
+                message = {
+                    "type": "query",
+                    "embedding": query_embedding.tolist(),
+                    "top_k": top_k
+                }
+                response = await self.p2p.send_and_wait(super_node, message)
+                if response and response.get('type') == 'query_response':
+                    results.extend(response['results'])
             except:
                 continue
         
@@ -116,8 +124,7 @@ class ProfileBasedRouter:
         if len(results) < top_k:
             peer_results = await self.p2p.query_peers(
                 query_embedding,
-                top_k - len(results),
-                tier_filter="stable"  # Chỉ hỏi Stable nodes
+                top_k - len(results)
             )
             results.extend(peer_results)
         
@@ -163,7 +170,8 @@ class ProfileBasedRouter:
                     logger.info(f"⬆️ User {user_id} upgraded to STABLE")
             
             if profile.total_queries > 1000 and profile.contribution_score > 0.8:
-                if profile.tier == UserTier.STABLE:profile.tier = UserTier.VIP_PRO
+                if profile.tier == UserTier.STABLE:
+                    profile.tier = UserTier.VIP_PRO
                     logger.info(f"⬆️ User {user_id} upgraded to VIP PRO")
         
         elif event == 'contribution':
