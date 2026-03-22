@@ -1,0 +1,3 @@
+## 2025-05-15 - [P2P Parallelization]
+**Learning:** Sequential P2P communication (broadcast/query) creates a significant bottleneck that scales linearly with the number of peers ($O(N)$). In a decentralized network, this leads to unacceptable latencies as the network grows. Parallelizing these operations with `asyncio.gather` reduces the wall-clock time to $O(1)$ relative to the number of peers (plus overhead), significantly improving response times for distributed queries.
+**Action:** Always use `asyncio.gather` with `return_exceptions=True` for network-bound operations in the P2P layer to ensure scalability and robustness against individual peer failures.
