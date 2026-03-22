@@ -1,3 +1,4 @@
+import asyncio
 import time
 import hashlib
 import json
@@ -98,8 +99,13 @@ class ProofOfContribution:
         # 3. Storage Score (từ FVS)
         # Get từ FaissVectorStore
         if hasattr(self, 'fvs_store') and self.fvs_store:
-            storage_mb = self.fvs_store.data_dir.stat().st_size / (1024 * 1024)
-            self.my_metrics.storage_score = min(1.0, storage_mb / 10240)  # Max 10GB
+            # Check if it's a file or directory
+            if self.fvs_store.data_dir.exists():
+                if self.fvs_store.data_dir.is_file():
+                    storage_mb = self.fvs_store.data_dir.stat().st_size / (1024 * 1024)
+                else:
+                    storage_mb = sum(f.stat().st_size for f in self.fvs_store.data_dir.glob('**/*') if f.is_file()) / (1024 * 1024)
+                self.my_metrics.storage_score = min(1.0, storage_mb / 10240)  # Max 10GB
         
         # 4. Contribution Score (weighted average)
         weights = {
@@ -184,7 +190,11 @@ class ProofOfContribution:
             })
             
             if self.node_id in self.super_nodes:
-                logger.info(f"🌟 ELECTED AS SUPER NODE! (Rank: {sorted_nodes.index((self.node_id, self.my_metrics)) + 1}/{len(valid_nodes)})")
+                try:
+                    rank = [n for n, m in sorted_nodes].index(self.node_id) + 1
+                    logger.info(f"🌟 ELECTED AS SUPER NODE! (Rank: {rank}/{len(valid_nodes)})")
+                except ValueError:
+                    pass
             else:
                 logger.info(f"📊 Election completed. Super Nodes: {len(self.super_nodes)}")
         

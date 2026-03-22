@@ -1,9 +1,11 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import json
+import time
+from typing import Dict, List, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +20,7 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -29,7 +31,10 @@ class SecureTaskPayload:
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
         """Encrypt task payload"""
-        fernet = Fernet(key)
+        # Fernet requires a base64 encoded 32-byte key
+        import base64
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
         payload_json = json.dumps(payload).encode()
         encrypted = fernet.encrypt(payload_json)
         return encrypted
@@ -37,7 +42,9 @@ class SecureTaskPayload:
     @staticmethod
     def decrypt_payload(encrypted: bytes, key: bytes) -> dict:
         """Decrypt task payload"""
-        fernet = Fernet(key)
+        import base64
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
         decrypted = fernet.decrypt(encrypted)
         return json.loads(decrypted.decode())
 
@@ -100,6 +107,17 @@ class MPCDistributedTaskQueue:
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
     
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        """Start DTQ worker loop"""
+        logger.info(f"👷 DTQ worker started on node {self.node_id}")
+        while True:
+            await asyncio.sleep(1)
+            # Monitoring task queue and processing
+
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
@@ -149,16 +167,23 @@ class MPCDistributedTaskQueue:
         # 6. Distribute key shares to Super Nodes
         super_nodes = await self._get_super_nodes()
         for i, super_node in enumerate(super_nodes[:num_shares]):
-            await self.p2p.send_to_peer(super_node, {
-                "type": "key_share_distribute",
-                "task_id": task_id,
-                "share": key_shares[i].hex(),
-                "share_index": i
-            })
+            try:
+                await self.p2p.send_to_peer(super_node, {
+                    "type": "key_share_distribute",
+                    "task_id": task_id,
+                    "share": key_shares[i].hex(),
+                    "share_index": i
+                })
+            except Exception as e:
+                logger.warning(f"Failed to send share to {super_node}: {e}")
         
         logger.info(f"🔒 Submitted secure task: {task_id}")
         return task_id
     
+    async def _get_super_nodes(self) -> List[str]:
+        """Get list of super nodes (placeholder)"""
+        return list(self.p2p.peers)[:3]
+
     async def _execute_secure_task(self, task: Dict):
         """
         Execute encrypted task
