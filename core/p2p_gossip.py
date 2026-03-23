@@ -162,13 +162,14 @@ class GossipP2P:
                 logger.debug(f"Removed stale peer: {peer}")
     
     async def broadcast(self, message: Dict):
-        """Broadcast message to all peers"""
+        """Broadcast message to all peers in parallel"""
+        tasks = []
         for peer in list(self.peers):
-            try:
-                await self.send_to_peer(peer, message)
-            except Exception as e:
-                logger.warning(f"Broadcast to {peer} failed: {e}")
-    
+            tasks.append(self.send_to_peer(peer, message))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
         try:
@@ -213,7 +214,7 @@ class GossipP2P:
             return None
     
     async def query_peers(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Query all peers for similar vectors"""
+        """Query all peers for similar vectors in parallel"""
         message = {
             "type": "query",
             "embedding": query_embedding.tolist(),
@@ -221,11 +222,18 @@ class GossipP2P:
         }
         
         all_results = []
+        peers = list(self.peers)
         
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
-            if response and response.get('type') == 'query_response':
-                all_results.extend(response['results'])
+        if not peers:
+            return []
+
+        # Send queries to all peers concurrently
+        tasks = [self.send_and_wait(peer, message) for peer in peers]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for response in responses:
+            if isinstance(response, dict) and response.get('type') == 'query_response':
+                all_results.extend(response.get('results', []))
         
         # Deduplicate and sort
         seen = set()
