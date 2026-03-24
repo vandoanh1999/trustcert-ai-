@@ -1,5 +1,5 @@
 """
-Genesis Core V7: The Portal Pillar (Genesis Hub)
+Genesis Core V8: The Portal Pillar (Genesis Hub)
 
 A user-friendly Streamlit interface for non-technical users to interact
 with the Genesis ecosystem.
@@ -14,25 +14,14 @@ API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
 # --- Helper Functions ---
 def query_genesis_backend(instruction, experts):
     """
-    Simulates a query to the backend. In a real V7 system, this would
+    Simulates a query to the backend. In a real V8 system, this would
     call a dispatch endpoint that uses the Chimera Core. For this PoC,
     we'll simulate the response and get a dispatch_id.
     """
-    st.info(f"Querying with experts: {experts}...")
-
     # This is a simulation. The real Chimera Core would be running this.
-    # We are directly using the feedback endpoint's recording function
-    # via a temporary, simulated "dispatch" endpoint we might add for the UI.
-
-    # Let's assume a simple dispatch simulation endpoint exists for the UI
     try:
-        # In a real scenario, you'd have a /dispatch endpoint that returns this
-        # For now, we simulate by calling the feedback service to log the event
-        # and get an ID back, which is close enough for our UI test.
-        # This part is a placeholder for the actual inference call.
-
         # Let's just mock the backend call for now.
-        time.sleep(2)
+        time.sleep(1.5)
         mock_dispatch_id = f"dispatch_{int(time.time())}"
         mock_response_text = f"This is a simulated response for your query about '{instruction[:30]}...' using experts {experts}."
 
@@ -52,9 +41,11 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"✅ Feedback ({score}/1.0) submitted successfully!")
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
+            time.sleep(1)
+            st.rerun()
         else:
             st.error(f"Failed to submit feedback. Server responded with: {response.status_code}")
             st.json(response.json())
@@ -64,12 +55,26 @@ def send_feedback_to_backend(dispatch_id, score):
 # --- Streamlit UI ---
 st.set_page_config(page_title="Genesis Hub", layout="wide")
 
-st.title("🌌 Genesis Hub")
+st.title("🌌 Genesis Core V8: Hub")
 st.caption("The Portal to the Genesis Symbiotic Network")
 
 # --- Initialization ---
 if 'last_response' not in st.session_state:
     st.session_state.last_response = None
+if 'widget_key' not in st.session_state:
+    st.session_state.widget_key = 0
+
+# --- Sidebar ---
+with st.sidebar:
+    st.header("Settings & Controls")
+    if st.button("🔄 Reset Session", use_container_width=True):
+        current_key = st.session_state.get('widget_key', 0)
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.session_state.widget_key = current_key + 1
+        st.rerun()
+    st.divider()
+    st.info("Genesis Core V8 is a decentralized, self-sustaining AI network.")
 
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
@@ -84,20 +89,32 @@ available_experts = [
 selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
-    default=available_experts[:2]
+    default=available_experts[:2],
+    key=f"experts_{st.session_state.widget_key}",
+    help="Choose the AI models that will collaborate on your query."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    key=f"instruction_{st.session_state.widget_key}",
+    help="Describe what you'd like the network to generate or analyze."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
-    with st.spinner("Dispatching query to the expert network..."):
+if st.button("🚀 Query Genesis", disabled=not user_instruction or not selected_experts):
+    with st.status("Dispatching query to the expert network...", expanded=True) as status:
+        st.write("🔍 Selecting optimal experts...")
+        time.sleep(0.5)
+        st.write("🧠 Consulting the Chimera Core...")
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
+            status.update(label="✅ Query complete!", state="complete", expanded=False)
             st.session_state.last_response = {
                 "dispatch_id": dispatch_id,
                 "text": response_text,
                 "experts": selected_experts
             }
+        else:
+            status.update(label="❌ Query failed.", state="error")
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
@@ -106,13 +123,18 @@ if st.session_state.last_response:
 
     response_data = st.session_state.last_response
 
-    st.text_area("Generated Response:", value=response_data["text"], height=150, disabled=True)
+    st.write("### Generated Response:")
+    st.code(response_data["text"], language="markdown")
     st.caption(f"Generated by: {', '.join(response_data['experts'])}")
     st.caption(f"Dispatch ID: {response_data['dispatch_id']}")
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    feedback_score = st.slider(
+        "Rating (0.0 = Bad, 1.0 = Perfect)",
+        0.0, 1.0, 0.75, 0.05,
+        help="Your feedback helps the network identify and reward high-quality experts."
+    )
 
     if st.button("Submit Feedback"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
