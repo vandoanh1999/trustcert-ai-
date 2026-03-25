@@ -71,6 +71,18 @@ st.caption("The Portal to the Genesis Symbiotic Network")
 if 'last_response' not in st.session_state:
     st.session_state.last_response = None
 
+if 'widget_key' not in st.session_state:
+    st.session_state.widget_key = 0
+
+# --- Sidebar ---
+with st.sidebar:
+    st.header("Settings")
+    if st.button("Reset Session", help="Clears all current query and feedback data."):
+        st.session_state.last_response = None
+        st.session_state.dispatch_history = {}
+        st.session_state.widget_key += 1
+        st.rerun()
+
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
 
@@ -87,7 +99,10 @@ selected_experts = st.multiselect(
     default=available_experts[:2]
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    key=f"instruction_{st.session_state.widget_key}"
+)
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
