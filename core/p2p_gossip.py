@@ -162,12 +162,18 @@ class GossipP2P:
                 logger.debug(f"Removed stale peer: {peer}")
     
     async def broadcast(self, message: Dict):
-        """Broadcast message to all peers"""
-        for peer in list(self.peers):
-            try:
-                await self.send_to_peer(peer, message)
-            except Exception as e:
-                logger.warning(f"Broadcast to {peer} failed: {e}")
+        """Broadcast message to all peers in parallel"""
+        peers = list(self.peers)
+        if not peers:
+            return
+
+        # Optimization: Parallelize broadcasts using asyncio.gather
+        tasks = [self.send_to_peer(peer, message) for peer in peers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for peer, result in zip(peers, results):
+            if isinstance(result, Exception):
+                logger.warning(f"Broadcast to {peer} failed: {result}")
     
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
@@ -213,28 +219,36 @@ class GossipP2P:
             return None
     
     async def query_peers(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Query all peers for similar vectors"""
+        """Query all peers for similar vectors in parallel"""
         message = {
             "type": "query",
             "embedding": query_embedding.tolist(),
             "top_k": top_k
         }
-        
+
+        peers = list(self.peers)
+        if not peers:
+            return []
+
+        # Optimization: Parallelize queries using asyncio.gather
+        # Reduces latency from O(N_peers * latency) to O(latency)
+        tasks = [self.send_and_wait(peer, message) for peer in peers]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
         all_results = []
-        
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
-            if response and response.get('type') == 'query_response':
+        for response in responses:
+            if (response and not isinstance(response, Exception) and
+                    response.get('type') == 'query_response'):
                 all_results.extend(response['results'])
-        
+
         # Deduplicate and sort
         seen = set()
         unique = []
-        for r in sorted(all_results, key=lambda x: x['score'], reverse=True):
+        for r in sorted(all_results, key=lambda x: x.get('score', 0), reverse=True):
             if r['id'] not in seen:
                 seen.add(r['id'])
                 unique.append(r)
-        
+
         return unique[:top_k]
     
     async def announce_vector(self, vec_id: str):
