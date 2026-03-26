@@ -18,8 +18,6 @@ def query_genesis_backend(instruction, experts):
     call a dispatch endpoint that uses the Chimera Core. For this PoC,
     we'll simulate the response and get a dispatch_id.
     """
-    st.info(f"Querying with experts: {experts}...")
-
     # This is a simulation. The real Chimera Core would be running this.
     # We are directly using the feedback endpoint's recording function
     # via a temporary, simulated "dispatch" endpoint we might add for the UI.
@@ -52,9 +50,11 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"✅ Feedback ({score}/1.0) submitted successfully!", icon="🔥")
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
+            time.sleep(1) # Small pause for user to see the change
+            st.rerun()
         else:
             st.error(f"Failed to submit feedback. Server responded with: {response.status_code}")
             st.json(response.json())
@@ -63,6 +63,16 @@ def send_feedback_to_backend(dispatch_id, score):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Genesis Hub", layout="wide")
+
+# --- Sidebar ---
+with st.sidebar:
+    st.title("⚙️ Genesis Hub Settings")
+    st.markdown("---")
+    if st.button("🔄 Reset Session", use_container_width=True):
+        # Clear specific session state keys
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
 
 st.title("🌌 Genesis Hub")
 st.caption("The Portal to the Genesis Symbiotic Network")
@@ -84,20 +94,33 @@ available_experts = [
 selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
-    default=available_experts[:2]
+    default=available_experts[:2],
+    help="In the full system, Genesis automatically routes your query to the most relevant expert adapters based on their past performance and expertise."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    help="Describe the task you want the expert network to perform. Be as specific as possible for better results."
+)
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
-    with st.spinner("Dispatching query to the expert network..."):
+    with st.status("Dispatching query to the expert network...", expanded=True) as status:
+        st.write("🔍 Identifying relevant expert adapters...")
+        time.sleep(0.8)
+        st.write(f"🛰️ Routing query to: {', '.join(selected_experts)}")
+
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+
         if dispatch_id and response_text:
+            st.write("✅ Response received from Chimera Core.")
             st.session_state.last_response = {
                 "dispatch_id": dispatch_id,
                 "text": response_text,
                 "experts": selected_experts
             }
+            status.update(label="Query Complete!", state="complete", expanded=False)
+        else:
+            status.update(label="Query Failed", state="error", expanded=True)
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
