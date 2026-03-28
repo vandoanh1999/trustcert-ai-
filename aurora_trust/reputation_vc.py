@@ -17,14 +17,28 @@ VC_STORE_PATH = "aurora_vc_store.json"
 
 # --- Reputation Management ---
 
+# Bolt ⚡: In-memory cache to avoid repeated I/O for reputation reads/updates.
+_REPUTATION_CACHE: Dict[str, float] = None
+
 def load_reputation_db() -> Dict[str, float]:
+    global _REPUTATION_CACHE
+    if _REPUTATION_CACHE is not None:
+        return _REPUTATION_CACHE
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
-    return {}
+            try:
+                _REPUTATION_CACHE = json.load(f)
+                return _REPUTATION_CACHE
+            except json.JSONDecodeError:
+                _REPUTATION_CACHE = {}
+                return _REPUTATION_CACHE
+    _REPUTATION_CACHE = {}
+    return _REPUTATION_CACHE
 
 def save_reputation_db(db: Dict[str, float]):
+    global _REPUTATION_CACHE
+    _REPUTATION_CACHE = db
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
@@ -33,10 +47,10 @@ def get_reputation(expert_id: str) -> float:
     return float(db.get(expert_id, 0.5))
 
 def update_reputation_with_feedback(expert_id: str, feedback_score: float) -> float:
-    old_score = get_reputation(expert_id)
+    db = load_reputation_db()
+    old_score = float(db.get(expert_id, 0.5))
     clamped_feedback = max(0.0, min(1.0, feedback_score))
     new_score = (1 - REPUTATION_EMA_LEARNING_RATE) * old_score + REPUTATION_EMA_LEARNING_RATE * clamped_feedback
-    db = load_reputation_db()
     db[expert_id] = new_score
     save_reputation_db(db)
     return new_score
