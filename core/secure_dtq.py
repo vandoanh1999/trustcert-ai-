@@ -3,8 +3,11 @@ import secrets
 from typing import Dict, List
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
+import json
+import time
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +21,13 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        return base64.urlsafe_b64encode(kdf.derive(password))
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:

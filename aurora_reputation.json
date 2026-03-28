@@ -1,4 +1,6 @@
 {
   "dummy_adapters/expert_A/adapter_model.bin": 0.54,
-  "dummy_adapters/expert_B/adapter_model.bin": 0.54
+  "dummy_adapters/expert_B/adapter_model.bin": 0.54,
+  "test_expert": 0.7999999999999994,
+  "test_expert_regression": 0.5670000000000001
 }
