@@ -163,11 +163,15 @@ class GossipP2P:
     
     async def broadcast(self, message: Dict):
         """Broadcast message to all peers"""
-        for peer in list(self.peers):
+        async def _safe_send(peer):
             try:
                 await self.send_to_peer(peer, message)
             except Exception as e:
                 logger.warning(f"Broadcast to {peer} failed: {e}")
+
+        tasks = [_safe_send(peer) for peer in list(self.peers)]
+        if tasks:
+            await asyncio.gather(*tasks)
     
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
@@ -220,10 +224,11 @@ class GossipP2P:
             "top_k": top_k
         }
         
-        all_results = []
+        tasks = [self.send_and_wait(peer, message) for peer in list(self.peers)]
+        responses = await asyncio.gather(*tasks) if tasks else []
         
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
+        all_results = []
+        for response in responses:
             if response and response.get('type') == 'query_response':
                 all_results.extend(response['results'])
         
