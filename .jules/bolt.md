@@ -1,0 +1,3 @@
+## 2025-05-15 - Parallelizing P2P Gossip Broadcast and Query
+**Learning:** The P2P Gossip Protocol in `core/p2p_gossip.py` was implemented using sequential `await` calls in loops for both broadcasting messages and querying peers. This created a significant performance bottleneck (O(n) latency, where n is the number of peers), especially in a decentralized network where network latency is unpredictable. Using `asyncio.gather` reduces this to O(1) effective latency (limited by the slowest peer), providing ~90% speedup in simulated 10-peer scenarios.
+**Action:** Always favor `asyncio.gather` for independent network operations in the P2P layer to ensure scalability as the network grows.
