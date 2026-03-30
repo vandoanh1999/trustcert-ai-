@@ -1,9 +1,12 @@
 import hashlib
 import secrets
+import json
+import time
+import asyncio
 from typing import Dict, List
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +21,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        import base64
+        return base64.urlsafe_b64encode(kdf.derive(password))
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -87,6 +91,22 @@ class MPCDistributedTaskQueue:
     - Results được mã hóa trước khi return
     """
     
+    def register_handler(self, task_type: str, handler: any):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+        logger.info(f"📋 Registered handler for: {task_type}")
+
+    async def start_worker(self):
+        """Start task worker loop"""
+        logger.info(f"👷 Worker started on node: {self.node_id}")
+        while True:
+            await asyncio.sleep(1)
+            # Simplified: Just check for pending tasks
+            for task_id, task in self.tasks.items():
+                if task['status'] == 'pending' and task_id not in self.running_tasks:
+                    self.running_tasks.add(task_id)
+                    asyncio.create_task(self._execute_secure_task(task))
+
     def __init__(self, node_id: str, p2p_network, max_concurrent: int = 3):
         self.node_id = node_id
         self.p2p = p2p_network
@@ -94,12 +114,16 @@ class MPCDistributedTaskQueue:
         
         # Task registry
         self.tasks: Dict[str, Dict] = {}
-        self.handlers: Dict[str, Callable] = {}
+        self.handlers: Dict[str, any] = {}
         self.running_tasks = set()
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
     
+    async def _get_super_nodes(self):
+        """Mock super nodes"""
+        return []
+
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
