@@ -76,16 +76,20 @@ st.header("1. Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
-selected_experts = st.multiselect(
+EXPERT_MAP = {
+    "🧠 Reasoning (Expert A)": "dummy_adapters/expert_A/adapter_model.bin",
+    "💻 Coding (Expert B)": "dummy_adapters/expert_B/adapter_model.bin",
+    "⚖️ Ethics (Expert C)": "dummy_adapters/expert_C/adapter_model.bin"
+}
+
+selected_aliases = st.multiselect(
     "Select Experts to Consult (simulation):",
-    options=available_experts,
-    default=available_experts[:2]
+    options=list(EXPERT_MAP.keys()),
+    default=list(EXPERT_MAP.keys())[:2],
+    help="Choose specialized AI experts to handle your query. In production, this is automated."
 )
+
+selected_experts = [EXPERT_MAP[alias] for alias in selected_aliases]
 
 user_instruction = st.text_area("Enter your instruction or question:")
 
