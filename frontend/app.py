@@ -76,27 +76,31 @@ st.header("1. Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
-selected_experts = st.multiselect(
+EXPERT_MAP = {
+    "🧠 Reasoning (Expert A)": "dummy_adapters/expert_A/adapter_model.bin",
+    "📝 History (Expert B)": "dummy_adapters/expert_B/adapter_model.bin",
+    "🔢 Mathematics (Expert C)": "dummy_adapters/expert_C/adapter_model.bin"
+}
+
+selected_expert_names = st.multiselect(
     "Select Experts to Consult (simulation):",
-    options=available_experts,
-    default=available_experts[:2]
+    options=list(EXPERT_MAP.keys()),
+    default=list(EXPERT_MAP.keys())[:2]
 )
+
+# Map selected names back to technical paths for the backend
+selected_expert_paths = [EXPERT_MAP[name] for name in selected_expert_names]
 
 user_instruction = st.text_area("Enter your instruction or question:")
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", disabled=not user_instruction or not selected_expert_names):
     with st.spinner("Dispatching query to the expert network..."):
-        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_expert_paths)
         if dispatch_id and response_text:
             st.session_state.last_response = {
                 "dispatch_id": dispatch_id,
                 "text": response_text,
-                "experts": selected_experts
+                "experts": selected_expert_names
             }
 
 # --- Feedback Panel ---
