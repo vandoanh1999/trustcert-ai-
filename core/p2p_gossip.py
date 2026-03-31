@@ -162,12 +162,15 @@ class GossipP2P:
                 logger.debug(f"Removed stale peer: {peer}")
     
     async def broadcast(self, message: Dict):
-        """Broadcast message to all peers"""
-        for peer in list(self.peers):
+        """Broadcast message to all peers (parallelized)"""
+        async def _safe_send(peer):
             try:
                 await self.send_to_peer(peer, message)
             except Exception as e:
                 logger.warning(f"Broadcast to {peer} failed: {e}")
+
+        if self.peers:
+            await asyncio.gather(*[_safe_send(p) for p in list(self.peers)])
     
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
@@ -213,19 +216,27 @@ class GossipP2P:
             return None
     
     async def query_peers(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Query all peers for similar vectors"""
+        """Query all peers for similar vectors (parallelized)"""
         message = {
             "type": "query",
             "embedding": query_embedding.tolist(),
             "top_k": top_k
         }
         
-        all_results = []
+        async def _safe_query(peer):
+            try:
+                response = await self.send_and_wait(peer, message)
+                if response and response.get('type') == 'query_response':
+                    return response.get('results', [])
+            except Exception as e:
+                logger.warning(f"Query to {peer} failed: {e}")
+            return []
         
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
-            if response and response.get('type') == 'query_response':
-                all_results.extend(response['results'])
+        all_results = []
+        if self.peers:
+            responses = await asyncio.gather(*[_safe_query(p) for p in list(self.peers)])
+            for results in responses:
+                all_results.extend(results)
         
         # Deduplicate and sort
         seen = set()
