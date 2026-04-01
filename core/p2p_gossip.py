@@ -162,12 +162,19 @@ class GossipP2P:
                 logger.debug(f"Removed stale peer: {peer}")
     
     async def broadcast(self, message: Dict):
-        """Broadcast message to all peers"""
-        for peer in list(self.peers):
+        """Broadcast message to all peers concurrently"""
+        peers = list(self.peers)
+        if not peers:
+            return
+
+        async def _safe_send(peer):
             try:
                 await self.send_to_peer(peer, message)
             except Exception as e:
                 logger.warning(f"Broadcast to {peer} failed: {e}")
+
+        # BOLT OPTIMIZATION: Parallelize broadcast to reduce O(N) latency to ~O(1)
+        await asyncio.gather(*[_safe_send(p) for p in peers])
     
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
@@ -213,26 +220,36 @@ class GossipP2P:
             return None
     
     async def query_peers(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Query all peers for similar vectors"""
+        """Query all peers for similar vectors concurrently"""
         message = {
             "type": "query",
             "embedding": query_embedding.tolist(),
             "top_k": top_k
         }
         
-        all_results = []
+        peers = list(self.peers)
+        if not peers:
+            return []
+
+        # BOLT OPTIMIZATION: Parallelize queries to reduce O(N) latency to ~O(1)
+        # We use asyncio.gather to fire off all requests at once
+        responses = await asyncio.gather(
+            *[self.send_and_wait(peer, message) for peer in peers],
+            return_exceptions=True
+        )
         
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
-            if response and response.get('type') == 'query_response':
-                all_results.extend(response['results'])
+        all_results = []
+        for response in responses:
+            if isinstance(response, dict) and response.get('type') == 'query_response':
+                all_results.extend(response.get('results', []))
         
         # Deduplicate and sort
         seen = set()
         unique = []
-        for r in sorted(all_results, key=lambda x: x['score'], reverse=True):
-            if r['id'] not in seen:
-                seen.add(r['id'])
+        # Sort all results by score (descending) before deduplicating
+        for r in sorted(all_results, key=lambda x: x.get('score', 0), reverse=True):
+            if r.get('id') not in seen:
+                seen.add(r.get('id'))
                 unique.append(r)
         
         return unique[:top_k]
