@@ -12,6 +12,12 @@ import time
 API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
 
 # --- Helper Functions ---
+EXPERT_MAP = {
+    "dummy_adapters/expert_A/adapter_model.bin": "🧠 Reasoning (Expert A)",
+    "dummy_adapters/expert_B/adapter_model.bin": "🎨 Creative (Expert B)",
+    "dummy_adapters/expert_C/adapter_model.bin": "⚖️ Ethics (Expert C)"
+}
+
 def query_genesis_backend(instruction, experts):
     """
     Simulates a query to the backend. In a real V7 system, this would
@@ -64,6 +70,15 @@ def send_feedback_to_backend(dispatch_id, score):
 # --- Streamlit UI ---
 st.set_page_config(page_title="Genesis Hub", layout="wide")
 
+# --- Sidebar & Navigation ---
+with st.sidebar:
+    st.title("Settings")
+    if st.button("🔄 Reset Session", help="Clear all inputs and start fresh"):
+        st.session_state.clear()
+        st.rerun()
+    st.divider()
+    st.info("Genesis Core V8\n\nStatus: 🟢 Connected")
+
 st.title("🌌 Genesis Hub")
 st.caption("The Portal to the Genesis Symbiotic Network")
 
@@ -76,15 +91,13 @@ st.header("1. Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
+available_experts = list(EXPERT_MAP.keys())
 selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
-    default=available_experts[:2]
+    default=available_experts[:2],
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    help="Choose one or more specialized expert models to handle your request."
 )
 
 user_instruction = st.text_area("Enter your instruction or question:")
@@ -114,7 +127,7 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback", help="Send your rating to help the network learn"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
@@ -129,3 +142,7 @@ if st.session_state.last_response:
              pass
 
         send_feedback_to_backend(response_data["dispatch_id"], feedback_score)
+        st.toast("Thank you for your feedback! 🚀")
+        time.sleep(1) # Give the user a moment to see the toast
+        st.session_state.last_response = None
+        st.rerun()
