@@ -74,20 +74,29 @@ if 'last_response' not in st.session_state:
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
 
+# Mapping technical paths to human-friendly aliases for better UX
+EXPERT_MAP = {
+    "🧠 Reasoning (Expert A)": "dummy_adapters/expert_A/adapter_model.bin",
+    "⚖️ Ethics (Expert B)": "dummy_adapters/expert_B/adapter_model.bin",
+    "🎨 Creativity (Expert C)": "dummy_adapters/expert_C/adapter_model.bin"
+}
+
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
-selected_experts = st.multiselect(
-    "Select Experts to Consult (simulation):",
-    options=available_experts,
-    default=available_experts[:2]
+selected_aliases = st.multiselect(
+    "Select Experts to Consult:",
+    options=list(EXPERT_MAP.keys()),
+    default=list(EXPERT_MAP.keys())[:2],
+    help="Choose specialized AI experts to handle your query."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+# Map aliases back to file paths for the backend call
+selected_experts = [EXPERT_MAP[alias] for alias in selected_aliases]
+
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., 'What are the benefits of a decentralized AI network?'"
+)
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
