@@ -66,7 +66,9 @@ async def main():
         }
     }
     # Simulate an external broadcast to the node
-    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", {"payload": approval_message})
+    # We must sign the gossip message itself to pass the node's signature check
+    signed_gossip_message = super_node.sign_gossip_message(approval_message)
+    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", signed_gossip_message)
 
     # 3. Verify the final outcome
     print("\n[3] Verifying final execution...")
