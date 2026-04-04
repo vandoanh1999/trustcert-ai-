@@ -162,12 +162,18 @@ class GossipP2P:
                 logger.debug(f"Removed stale peer: {peer}")
     
     async def broadcast(self, message: Dict):
-        """Broadcast message to all peers"""
-        for peer in list(self.peers):
+        """Broadcast message to all peers in parallel"""
+        if not self.peers:
+            return
+
+        async def _safe_send(peer, msg):
             try:
-                await self.send_to_peer(peer, message)
+                await self.send_to_peer(peer, msg)
             except Exception as e:
                 logger.warning(f"Broadcast to {peer} failed: {e}")
+
+        tasks = [_safe_send(peer, message) for peer in list(self.peers)]
+        await asyncio.gather(*tasks)
     
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
@@ -213,19 +219,24 @@ class GossipP2P:
             return None
     
     async def query_peers(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Query all peers for similar vectors"""
+        """Query all peers for similar vectors in parallel"""
+        if not self.peers:
+            return []
+
         message = {
             "type": "query",
             "embedding": query_embedding.tolist(),
             "top_k": top_k
         }
         
-        all_results = []
+        # Parallel query execution
+        tasks = [self.send_and_wait(peer, message) for peer in list(self.peers)]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
         
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
-            if response and response.get('type') == 'query_response':
-                all_results.extend(response['results'])
+        all_results = []
+        for response in responses:
+            if isinstance(response, dict) and response.get('type') == 'query_response':
+                all_results.extend(response['results'] or [])
         
         # Deduplicate and sort
         seen = set()
