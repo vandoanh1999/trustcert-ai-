@@ -74,20 +74,29 @@ if 'last_response' not in st.session_state:
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
 
+# Mapping technical paths to human-readable aliases for better UX
+EXPERT_MAP = {
+    "dummy_adapters/expert_A/adapter_model.bin": "🧠 Reasoning (Expert A)",
+    "dummy_adapters/expert_B/adapter_model.bin": "🎨 Creative (Expert B)",
+    "dummy_adapters/expert_C/adapter_model.bin": "📊 Analysis (Expert C)"
+}
+
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
-selected_experts = st.multiselect(
+selected_expert_names = st.multiselect(
     "Select Experts to Consult (simulation):",
-    options=available_experts,
-    default=available_experts[:2]
+    options=list(EXPERT_MAP.values()),
+    default=list(EXPERT_MAP.values())[:2]
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+# Map back to technical paths for backend compatibility
+REVERSE_EXPERT_MAP = {v: k for k, v in EXPERT_MAP.items()}
+selected_experts = [REVERSE_EXPERT_MAP[name] for name in selected_expert_names]
+
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="What are the benefits of a decentralized AI network?"
+)
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
@@ -112,9 +121,13 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    # Replacing slider with a more intuitive star-rating system
+    feedback_stars = st.feedback("stars")
 
-    if st.button("Submit Feedback"):
+    if feedback_stars is not None:
+        # Map 0-4 stars to 0.2-1.0 score (or similar logic)
+        feedback_score = (feedback_stars + 1) / 5.0
+
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
@@ -128,4 +141,9 @@ if st.session_state.last_response:
              # Ignore if it fails, the main feedback call is the important one to test
              pass
 
+        # Use st.toast for delightful, non-blocking feedback
+        st.toast(f"Thank you for your {feedback_stars + 1}-star feedback! ✨", icon="✅")
         send_feedback_to_backend(response_data["dispatch_id"], feedback_score)
+
+        # Session state is cleared inside send_feedback_to_backend upon success,
+        # which will hide the feedback section on the next run.
