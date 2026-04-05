@@ -161,13 +161,19 @@ class GossipP2P:
                 self.peer_last_seen.pop(peer, None)
                 logger.debug(f"Removed stale peer: {peer}")
     
+    async def _safe_send(self, peer: str, message: Dict):
+        """Internal helper for parallel broadcast"""
+        try:
+            await self.send_to_peer(peer, message)
+        except Exception as e:
+            logger.warning(f"Broadcast to {peer} failed: {e}")
+
     async def broadcast(self, message: Dict):
-        """Broadcast message to all peers"""
-        for peer in list(self.peers):
-            try:
-                await self.send_to_peer(peer, message)
-            except Exception as e:
-                logger.warning(f"Broadcast to {peer} failed: {e}")
+        """Broadcast message to all peers (Parallelized)"""
+        if not self.peers:
+            return
+        # V8 Optimization: Parallelize broadcast for lower latency
+        await asyncio.gather(*[self._safe_send(peer, message) for peer in list(self.peers)])
     
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
@@ -213,7 +219,7 @@ class GossipP2P:
             return None
     
     async def query_peers(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Query all peers for similar vectors"""
+        """Query all peers for similar vectors (Parallelized)"""
         message = {
             "type": "query",
             "embedding": query_embedding.tolist(),
@@ -222,8 +228,21 @@ class GossipP2P:
         
         all_results = []
         
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
+        # V8 Optimization: Parallelize queries to reduce O(N*L) to O(L) latency
+        peer_list = list(self.peers)
+        if not peer_list:
+            return []
+
+        # Use return_exceptions=True to ensure one peer failing doesn't crash the entire query
+        responses = await asyncio.gather(
+            *[self.send_and_wait(peer, message) for peer in peer_list],
+            return_exceptions=True
+        )
+
+        for response in responses:
+            if isinstance(response, Exception):
+                logger.warning(f"Query peer failed with exception: {response}")
+                continue
             if response and response.get('type') == 'query_response':
                 all_results.extend(response['results'])
         
