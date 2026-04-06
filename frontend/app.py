@@ -9,16 +9,17 @@ import requests
 import time
 
 # --- Configuration ---
-API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
+API_URL = "http://127.0.0.1:8000"  # The URL of our FastAPI backend
+
 
 # --- Helper Functions ---
-def query_genesis_backend(instruction, experts):
+def query_genesis_backend(instruction, experts, expert_aliases):
     """
     Simulates a query to the backend. In a real V7 system, this would
     call a dispatch endpoint that uses the Chimera Core. For this PoC,
     we'll simulate the response and get a dispatch_id.
     """
-    st.info(f"Querying with experts: {experts}...")
+    st.info(f"Querying with experts: {expert_aliases}...")
 
     # This is a simulation. The real Chimera Core would be running this.
     # We are directly using the feedback endpoint's recording function
@@ -34,17 +35,21 @@ def query_genesis_backend(instruction, experts):
         # Let's just mock the backend call for now.
         time.sleep(2)
         mock_dispatch_id = f"dispatch_{int(time.time())}"
-        mock_response_text = f"This is a simulated response for your query about '{instruction[:30]}...' using experts {experts}."
+        msg = f"This is a simulated response for your query about " \
+              f"'{instruction[:30]}...' using experts {experts}."
+        mock_response_text = msg
 
         # We need to store this mapping locally in the session state for the UI
         if 'dispatch_history' not in st.session_state:
             st.session_state.dispatch_history = {}
-        st.session_state.dispatch_history[mock_dispatch_id] = experts # Store which experts were used
+        # Store which experts were used
+        st.session_state.dispatch_history[mock_dispatch_id] = experts
 
         return mock_dispatch_id, mock_response_text
     except requests.exceptions.RequestException as e:
         st.error(f"Error connecting to the backend: {e}")
         return None, None
+
 
 def send_feedback_to_backend(dispatch_id, score):
     """Sends the user's feedback score to the backend API."""
@@ -53,13 +58,15 @@ def send_feedback_to_backend(dispatch_id, score):
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
             st.success(f"Feedback ({score}/1.0) submitted successfully!")
-            # Clear the last response to be ready for the next query
+            # Clear the last response
             st.session_state.last_response = None
         else:
-            st.error(f"Failed to submit feedback. Server responded with: {response.status_code}")
+            st.error(f"Failed to submit feedback. Status: "
+                     f"{response.status_code}")
             st.json(response.json())
     except requests.exceptions.RequestException as e:
         st.error(f"Error connecting to the backend: {e}")
+
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Genesis Hub", layout="wide")
@@ -76,27 +83,35 @@ st.header("1. Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
-selected_experts = st.multiselect(
+EXPERT_MAP = {
+    "🧠 Reasoning (Expert A)": "dummy_adapters/expert_A/adapter_model.bin",
+    "⚖️ Ethics (Expert B)": "dummy_adapters/expert_B/adapter_model.bin",
+    "🎨 Creativity (Expert C)": "dummy_adapters/expert_C/adapter_model.bin"
+}
+
+selected_expert_aliases = st.multiselect(
     "Select Experts to Consult (simulation):",
-    options=available_experts,
-    default=available_experts[:2]
+    options=list(EXPERT_MAP.keys()),
+    default=list(EXPERT_MAP.keys())[:2],
+    help="Select one or more specialized AI experts to process your query."
 )
+
+# Resolve aliases back to technical paths for the backend query
+selected_experts = [EXPERT_MAP[alias] for alias in selected_expert_aliases]
 
 user_instruction = st.text_area("Enter your instruction or question:")
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis",
+             disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
-        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+        dispatch_id, response_text = query_genesis_backend(
+            user_instruction, selected_experts, selected_expert_aliases
+        )
         if dispatch_id and response_text:
             st.session_state.last_response = {
                 "dispatch_id": dispatch_id,
                 "text": response_text,
-                "experts": selected_experts
+                "experts": selected_expert_aliases
             }
 
 # --- Feedback Panel ---
@@ -106,26 +121,26 @@ if st.session_state.last_response:
 
     response_data = st.session_state.last_response
 
-    st.text_area("Generated Response:", value=response_data["text"], height=150, disabled=True)
+    st.text_area("Generated Response:", value=response_data["text"],
+                 height=150, disabled=True)
     st.caption(f"Generated by: {', '.join(response_data['experts'])}")
     st.caption(f"Dispatch ID: {response_data['dispatch_id']}")
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)",
+                               0.0, 1.0, 0.75, 0.05)
 
     if st.button("Submit Feedback"):
-        # This is a slight hack for the demo. Since the backend isn't *really* tracking
-        # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
-        # This simulates the real flow where the ID would already exist from the inference step.
+        # This is a slight hack for the demo.
         try:
-            register_url = f"{API_URL}/feedback/register_mock_dispatch" # We need to create this endpoint
+            register_url = f"{API_URL}/feedback/register_mock_dispatch"
             requests.post(register_url, json={
                 "dispatch_id": response_data['dispatch_id'],
                 "experts": response_data['experts']
             })
-        except:
-             # Ignore if it fails, the main feedback call is the important one to test
-             pass
+        except Exception:
+            # Ignore if it fails
+            pass
 
         send_feedback_to_backend(response_data["dispatch_id"], feedback_score)
