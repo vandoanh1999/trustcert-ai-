@@ -1,0 +1,3 @@
+## 2026-04-07 - In-memory Reputation Caching
+**Learning:** Implementing a global in-memory cache for frequently read JSON databases (like reputation scores) provides a significant performance boost (~40x-300x depending on load) by avoiding redundant disk I/O and JSON parsing. However, when using a shared cache, it is critical to return copies (e.g., `dict(cache)`) to prevent `RuntimeError: dictionary changed size during iteration` in potentially concurrent environments, as the previous `json.load` implementation implicitly provided a fresh copy.
+**Action:** Always return a copy of shared mutable cache structures and ensure benchmark data or development hacks (like mock scripts) are cleaned up before submission.

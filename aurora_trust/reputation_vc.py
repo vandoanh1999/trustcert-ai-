@@ -17,14 +17,27 @@ VC_STORE_PATH = "aurora_vc_store.json"
 
 # --- Reputation Management ---
 
+_REPUTATION_CACHE: Dict[str, float] = None
+
 def load_reputation_db() -> Dict[str, float]:
+    global _REPUTATION_CACHE
+    if _REPUTATION_CACHE is not None:
+        return dict(_REPUTATION_CACHE)
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
-    return {}
+            try:
+                _REPUTATION_CACHE = json.load(f)
+                return dict(_REPUTATION_CACHE)
+            except json.JSONDecodeError:
+                _REPUTATION_CACHE = {}
+                return dict(_REPUTATION_CACHE)
+    _REPUTATION_CACHE = {}
+    return dict(_REPUTATION_CACHE)
 
 def save_reputation_db(db: Dict[str, float]):
+    global _REPUTATION_CACHE
+    _REPUTATION_CACHE = db
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
