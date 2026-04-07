@@ -52,7 +52,7 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"✅ Feedback ({score}/1.0) submitted successfully!", icon="🚀")
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
         else:
@@ -76,18 +76,26 @@ st.header("1. Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
-selected_experts = st.multiselect(
+EXPERT_MAP = {
+    "🧠 Reasoning (Expert A)": "dummy_adapters/expert_A/adapter_model.bin",
+    "🎨 Creative (Expert B)": "dummy_adapters/expert_B/adapter_model.bin",
+    "🛠️ Technical (Expert C)": "dummy_adapters/expert_C/adapter_model.bin"
+}
+
+selected_expert_names = st.multiselect(
     "Select Experts to Consult (simulation):",
-    options=available_experts,
-    default=available_experts[:2]
+    options=list(EXPERT_MAP.keys()),
+    default=list(EXPERT_MAP.keys())[:2],
+    help="Choose one or more specialized AI experts to handle your request."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+# Map names back to file paths for the backend
+selected_experts = [EXPERT_MAP[name] for name in selected_expert_names]
+
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., 'What are the benefits of a decentralized AI network?' or 'Explain ZK-proofs in simple terms.'"
+)
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
