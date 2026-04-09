@@ -12,34 +12,28 @@ import time
 API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
 
 # --- Helper Functions ---
-def query_genesis_backend(instruction, experts):
+def query_genesis_backend(instruction, friendly_names):
     """
     Simulates a query to the backend. In a real V7 system, this would
     call a dispatch endpoint that uses the Chimera Core. For this PoC,
     we'll simulate the response and get a dispatch_id.
     """
-    st.info(f"Querying with experts: {experts}...")
+    st.info(f"Querying with: {', '.join(friendly_names)}...")
+
+    # Map friendly names to technical paths for backend/storage
+    expert_paths = [EXPERT_MAP[name] for name in friendly_names]
 
     # This is a simulation. The real Chimera Core would be running this.
-    # We are directly using the feedback endpoint's recording function
-    # via a temporary, simulated "dispatch" endpoint we might add for the UI.
-
-    # Let's assume a simple dispatch simulation endpoint exists for the UI
     try:
-        # In a real scenario, you'd have a /dispatch endpoint that returns this
-        # For now, we simulate by calling the feedback service to log the event
-        # and get an ID back, which is close enough for our UI test.
-        # This part is a placeholder for the actual inference call.
-
         # Let's just mock the backend call for now.
         time.sleep(2)
         mock_dispatch_id = f"dispatch_{int(time.time())}"
-        mock_response_text = f"This is a simulated response for your query about '{instruction[:30]}...' using experts {experts}."
+        mock_response_text = f"This is a simulated response for your query about '{instruction[:30]}...' using {', '.join(friendly_names)}."
 
         # We need to store this mapping locally in the session state for the UI
         if 'dispatch_history' not in st.session_state:
             st.session_state.dispatch_history = {}
-        st.session_state.dispatch_history[mock_dispatch_id] = experts # Store which experts were used
+        st.session_state.dispatch_history[mock_dispatch_id] = expert_paths # Store paths for reputation
 
         return mock_dispatch_id, mock_response_text
     except requests.exceptions.RequestException as e:
@@ -52,7 +46,7 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast("Feedback submitted successfully! 🚀")
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
         else:
@@ -76,18 +70,23 @@ st.header("1. Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
+EXPERT_MAP = {
+    "🧠 Reasoning (Expert A)": "dummy_adapters/expert_A/adapter_model.bin",
+    "⚖️ Ethics (Expert B)": "dummy_adapters/expert_B/adapter_model.bin",
+    "🎨 Creative (Expert C)": "dummy_adapters/expert_C/adapter_model.bin"
+}
+available_experts = list(EXPERT_MAP.keys())
+
 selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2]
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., How can we optimize the symbiotic growth of the network?"
+)
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
@@ -96,7 +95,7 @@ if st.button("Query Genesis", disabled=not user_instruction or not selected_expe
             st.session_state.last_response = {
                 "dispatch_id": dispatch_id,
                 "text": response_text,
-                "experts": selected_experts
+                "experts": selected_experts # Keep friendly names for UI feedback
             }
 
 # --- Feedback Panel ---
@@ -120,9 +119,13 @@ if st.session_state.last_response:
         # This simulates the real flow where the ID would already exist from the inference step.
         try:
             register_url = f"{API_URL}/feedback/register_mock_dispatch" # We need to create this endpoint
+
+            # Map friendly names back to paths for backend registration
+            expert_paths = [EXPERT_MAP[name] for name in response_data['experts']]
+
             requests.post(register_url, json={
                 "dispatch_id": response_data['dispatch_id'],
-                "experts": response_data['experts']
+                "experts": expert_paths
             })
         except:
              # Ignore if it fails, the main feedback call is the important one to test
