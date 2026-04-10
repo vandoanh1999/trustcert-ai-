@@ -17,16 +17,31 @@ VC_STORE_PATH = "aurora_vc_store.json"
 
 # --- Reputation Management ---
 
+_REPUTATION_CACHE = None
+
 def load_reputation_db() -> Dict[str, float]:
-    if os.path.exists(REP_DB_PATH):
-        with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
-    return {}
+    """Load reputation database with in-memory caching."""
+    global _REPUTATION_CACHE
+    if _REPUTATION_CACHE is None:
+        if os.path.exists(REP_DB_PATH):
+            with open(REP_DB_PATH, "r") as f:
+                try:
+                    _REPUTATION_CACHE = json.load(f)
+                except json.JSONDecodeError:
+                    _REPUTATION_CACHE = {}
+        else:
+            _REPUTATION_CACHE = {}
+
+    # Return a copy to maintain isolation (prevents accidental in-memory modifications)
+    return _REPUTATION_CACHE.copy()
 
 def save_reputation_db(db: Dict[str, float]):
+    """Save reputation database and update in-memory cache."""
+    global _REPUTATION_CACHE
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
+    # Update cache only after successful write
+    _REPUTATION_CACHE = db.copy()
 
 def get_reputation(expert_id: str) -> float:
     db = load_reputation_db()
