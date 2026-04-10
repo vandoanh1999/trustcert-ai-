@@ -1,0 +1,3 @@
+## 2025-05-15 - [Expert Alias Mapping & Interaction Polish]
+**Learning:** Abstracting technical implementation details (like file paths) into friendly aliases with emojis significantly improves the "Symbiotic" feel of the Genesis ecosystem for non-technical users. Using `st.toast` for feedback submission provides a modern, non-blocking notification that doesn't disrupt the user's vertical scroll position like `st.success` banners do.
+**Action:** Always provide a translation layer between technical backend identifiers and user-friendly labels in multiselect and status components. Prefer `st.toast` for secondary confirmation actions to maintain a clean interface.
