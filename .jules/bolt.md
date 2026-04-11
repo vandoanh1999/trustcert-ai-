@@ -1,0 +1,3 @@
+## 2025-05-22 - Parallelizing P2P Gossip Operations
+**Learning:** Sequential network operations in the P2P gossip layer (broadcast and query) create a linear bottleneck ($O(N)$ latency) relative to the number of peers. In decentralized systems where nodes might have high latency, this significantly degrades network convergence speed and query responsiveness.
+**Action:** Always parallelize multi-peer communication using `asyncio.gather` with `return_exceptions=True` and appropriate error handling helpers (like `_safe_send`) to ensure that individual peer failures do not block the entire network operation.
