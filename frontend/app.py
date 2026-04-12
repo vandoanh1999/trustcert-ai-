@@ -11,14 +11,23 @@ import time
 # --- Configuration ---
 API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
 
+# Friendly name mapping for experts
+EXPERT_MAP = {
+    "🧠 Reasoning (Expert A)": "dummy_adapters/expert_A/adapter_model.bin",
+    "📝 Creative (Expert B)": "dummy_adapters/expert_B/adapter_model.bin",
+    "🔍 Analysis (Expert C)": "dummy_adapters/expert_C/adapter_model.bin"
+}
+
 # --- Helper Functions ---
-def query_genesis_backend(instruction, experts):
+def query_genesis_backend(instruction, expert_names):
     """
     Simulates a query to the backend. In a real V7 system, this would
     call a dispatch endpoint that uses the Chimera Core. For this PoC,
     we'll simulate the response and get a dispatch_id.
     """
-    st.info(f"Querying with experts: {experts}...")
+    # Map friendly names back to technical paths
+    experts = [EXPERT_MAP[name] for name in expert_names]
+    st.info(f"Querying with experts: {', '.join(expert_names)}...")
 
     # This is a simulation. The real Chimera Core would be running this.
     # We are directly using the feedback endpoint's recording function
@@ -76,18 +85,16 @@ st.header("1. Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
-available_experts = [
-    "dummy_adapters/expert_A/adapter_model.bin",
-    "dummy_adapters/expert_B/adapter_model.bin",
-    "dummy_adapters/expert_C/adapter_model.bin" # A hypothetical new expert
-]
 selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
-    options=available_experts,
-    default=available_experts[:2]
+    options=list(EXPERT_MAP.keys()),
+    default=list(EXPERT_MAP.keys())[:2]
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Explain the anti-sybil mechanism in Genesis Core V8."
+)
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
@@ -112,20 +119,27 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    # st.feedback is available in Streamlit 1.35.0+
+    stars = st.feedback("stars")
 
-    if st.button("Submit Feedback"):
+    if stars is not None:
+        # Convert 0-4 stars to 0.0-1.0 scale
+        feedback_score = (stars + 1) / 5.0
+
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
         try:
-            register_url = f"{API_URL}/feedback/register_mock_dispatch" # We need to create this endpoint
+            # Map friendly names back to paths for backend compatibility
+            expert_paths = [EXPERT_MAP.get(name, name) for name in response_data['experts']]
+            register_url = f"{API_URL}/feedback/register_mock_dispatch"
             requests.post(register_url, json={
                 "dispatch_id": response_data['dispatch_id'],
-                "experts": response_data['experts']
+                "experts": expert_paths
             })
         except:
              # Ignore if it fails, the main feedback call is the important one to test
              pass
 
         send_feedback_to_backend(response_data["dispatch_id"], feedback_score)
+        st.toast("Thank you for your feedback! 🚀")
