@@ -17,26 +17,55 @@ VC_STORE_PATH = "aurora_vc_store.json"
 
 # --- Reputation Management ---
 
+# Performance Cache: Avoid redundant disk I/O
+_REPUTATION_CACHE = None
+_REPUTATION_MTIME = 0
+
 def load_reputation_db() -> Dict[str, float]:
-    if os.path.exists(REP_DB_PATH):
+    """Loads the reputation database, with in-memory caching and mtime validation."""
+    global _REPUTATION_CACHE, _REPUTATION_MTIME
+
+    if not os.path.exists(REP_DB_PATH):
+        return {}
+
+    try:
+        current_mtime = os.path.getmtime(REP_DB_PATH)
+        # If cache is fresh, return a copy to prevent external modification
+        if _REPUTATION_CACHE is not None and current_mtime <= _REPUTATION_MTIME:
+            return _REPUTATION_CACHE.copy()
+
+        # Cache is stale or missing, reload from disk
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
-    return {}
+            db = json.load(f)
+            _REPUTATION_CACHE = db
+            _REPUTATION_MTIME = current_mtime
+            return db.copy()
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 def save_reputation_db(db: Dict[str, float]):
+    """Saves the reputation database to disk and updates the cache."""
+    global _REPUTATION_CACHE, _REPUTATION_MTIME
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
+    # Update cache after successful write
+    _REPUTATION_CACHE = db.copy()
+    _REPUTATION_MTIME = os.path.getmtime(REP_DB_PATH)
+
 def get_reputation(expert_id: str) -> float:
+    """Retrieves the reputation score for a specific expert."""
     db = load_reputation_db()
     return float(db.get(expert_id, 0.5))
 
 def update_reputation_with_feedback(expert_id: str, feedback_score: float) -> float:
-    old_score = get_reputation(expert_id)
+    """Updates expert reputation using EMA, optimized to minimize disk I/O."""
+    db = load_reputation_db() # Single load call
+    old_score = float(db.get(expert_id, 0.5))
+
     clamped_feedback = max(0.0, min(1.0, feedback_score))
     new_score = (1 - REPUTATION_EMA_LEARNING_RATE) * old_score + REPUTATION_EMA_LEARNING_RATE * clamped_feedback
-    db = load_reputation_db()
+
     db[expert_id] = new_score
     save_reputation_db(db)
     return new_score
