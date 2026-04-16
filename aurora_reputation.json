@@ -1,4 +1,5 @@
 {
-  "dummy_adapters/expert_A/adapter_model.bin": 0.54,
-  "dummy_adapters/expert_B/adapter_model.bin": 0.54
+  "dummy_adapters/expert_A/adapter_model.bin": 0.85,
+  "dummy_adapters/expert_B/adapter_model.bin": 0.72,
+  "dummy_adapters/expert_C/adapter_model.bin": 0.91
 }
