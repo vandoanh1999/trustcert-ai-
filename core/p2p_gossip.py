@@ -162,12 +162,19 @@ class GossipP2P:
                 logger.debug(f"Removed stale peer: {peer}")
     
     async def broadcast(self, message: Dict):
-        """Broadcast message to all peers"""
-        for peer in list(self.peers):
+        """Broadcast message to all peers concurrently"""
+        peers = list(self.peers)
+        if not peers:
+            return
+
+        async def _safe_send(p):
             try:
-                await self.send_to_peer(peer, message)
+                await self.send_to_peer(p, message)
             except Exception as e:
-                logger.warning(f"Broadcast to {peer} failed: {e}")
+                logger.warning(f"Broadcast to {p} failed: {e}")
+
+        # BOLT OPTIMIZATION: Execute all peer broadcasts concurrently to reduce O(N) latency to O(max(L))
+        await asyncio.gather(*[_safe_send(peer) for peer in peers])
     
     async def send_to_peer(self, peer: str, message: Dict):
         """Send message to specific peer"""
@@ -213,17 +220,22 @@ class GossipP2P:
             return None
     
     async def query_peers(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Query all peers for similar vectors"""
+        """Query all peers for similar vectors concurrently"""
         message = {
             "type": "query",
             "embedding": query_embedding.tolist(),
             "top_k": top_k
         }
         
-        all_results = []
+        peers = list(self.peers)
+        if not peers:
+            return []
+
+        # BOLT OPTIMIZATION: Parallelize peer queries using asyncio.gather for major latency improvement
+        responses = await asyncio.gather(*[self.send_and_wait(peer, message) for peer in peers])
         
-        for peer in list(self.peers):
-            response = await self.send_and_wait(peer, message)
+        all_results = []
+        for response in responses:
             if response and response.get('type') == 'query_response':
                 all_results.extend(response['results'])
         
