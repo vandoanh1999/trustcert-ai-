@@ -33,6 +33,8 @@ class ThresholdSignature:
     @staticmethod
     def combine_shares_and_sign(shares: List[str], message: bytes) -> bytes:
         private_key_hex = SSS.recover_secret(shares)
+        # Ensure the hex string is 64 characters (32 bytes) long
+        private_key_hex = private_key_hex.zfill(64)
         private_key_bytes = bytes.fromhex(private_key_hex)
 
         key = ECC.construct(curve='P-256', d=int.from_bytes(private_key_bytes, 'big'))
