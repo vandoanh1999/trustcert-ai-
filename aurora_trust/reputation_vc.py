@@ -15,28 +15,47 @@ from core.config import *
 REP_DB_PATH = "aurora_reputation.json"
 VC_STORE_PATH = "aurora_vc_store.json"
 
+# BOLT OPTIMIZATION: In-memory cache for reputation DB to avoid redundant disk I/O
+_reputation_cache: Dict[str, float] = {}
+_cache_last_loaded: float = 0
+
 # --- Reputation Management ---
 
 def load_reputation_db() -> Dict[str, float]:
+    global _reputation_cache, _cache_last_loaded
+
     if os.path.exists(REP_DB_PATH):
+        mtime = os.path.getmtime(REP_DB_PATH)
+        # Check if cache is still valid
+        if _reputation_cache and mtime <= _cache_last_loaded:
+            return _reputation_cache
+
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
+            try:
+                _reputation_cache = json.load(f)
+                _cache_last_loaded = mtime
+                return _reputation_cache
+            except json.JSONDecodeError:
+                return {}
     return {}
 
 def save_reputation_db(db: Dict[str, float]):
+    global _reputation_cache, _cache_last_loaded
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
+    _reputation_cache = db
+    _cache_last_loaded = os.path.getmtime(REP_DB_PATH)
 
 def get_reputation(expert_id: str) -> float:
     db = load_reputation_db()
     return float(db.get(expert_id, 0.5))
 
 def update_reputation_with_feedback(expert_id: str, feedback_score: float) -> float:
-    old_score = get_reputation(expert_id)
+    # BOLT OPTIMIZATION: Use a single load_reputation_db() call instead of multiple
+    db = load_reputation_db()
+    old_score = float(db.get(expert_id, 0.5))
     clamped_feedback = max(0.0, min(1.0, feedback_score))
     new_score = (1 - REPUTATION_EMA_LEARNING_RATE) * old_score + REPUTATION_EMA_LEARNING_RATE * clamped_feedback
-    db = load_reputation_db()
     db[expert_id] = new_score
     save_reputation_db(db)
     return new_score
