@@ -91,9 +91,14 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., 'Summarize the latest research on P2P consensus' or 'Analyze this data set for anomalies'",
+    help="Provide a clear instruction for the Genesis expert network."
+)
+st.caption(f"Character count: {len(user_instruction)}")
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", type="primary", use_container_width=True, disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -119,7 +124,18 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    # Dynamic status label based on score
+    if feedback_score < 0.3:
+        status_text = "Poor 🔴"
+    elif feedback_score < 0.6:
+        status_text = "Average 🟠"
+    elif feedback_score < 0.9:
+        status_text = "Good 🟢"
+    else:
+        status_text = "Perfect 🌟"
+    st.markdown(f"Status: **{status_text}**")
+
+    if st.button("Submit Feedback", type="primary", use_container_width=True):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
