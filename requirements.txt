@@ -13,3 +13,13 @@ accelerate
 bitsandbytes
 llama-cpp-python
 scikit-learn
+pycryptodome
+cryptography
+six
+pandas
+streamlit
+playwright
+uvicorn
+fastapi
+pytest
+pytest-asyncio
