@@ -59,14 +59,17 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"Feedback ({score}/1.0) submitted successfully! 🚀", icon="✅")
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
+            return True
         else:
             st.error(f"Failed to submit feedback. Server responded with: {response.status_code}")
             st.json(response.json())
+            return False
     except requests.exceptions.RequestException as e:
         st.error(f"Error connecting to the backend: {e}")
+        return False
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Genesis Hub", layout="wide")
@@ -119,18 +122,36 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
-        # This is a slight hack for the demo. Since the backend isn't *really* tracking
-        # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
-        # This simulates the real flow where the ID would already exist from the inference step.
-        try:
-            register_url = f"{API_URL}/feedback/register_mock_dispatch" # We need to create this endpoint
-            requests.post(register_url, json={
-                "dispatch_id": response_data['dispatch_id'],
-                "experts": response_data['experts']
-            })
-        except:
-             # Ignore if it fails, the main feedback call is the important one to test
-             pass
+    # Dynamic sentiment feedback
+    sentiment_map = {
+        (0.0, 0.2): "☹️ Poor",
+        (0.2, 0.4): "😐 Fair",
+        (0.4, 0.6): "🙂 Good",
+        (0.6, 0.8): "😊 Great",
+        (0.8, 1.01): "🤩 Excellent!"
+    }
+    sentiment_text = "Unknown"
+    for (low, high), label in sentiment_map.items():
+        if low <= feedback_score < high:
+            sentiment_text = label
+            break
+    st.caption(f"Your rating: **{sentiment_text}**")
 
-        send_feedback_to_backend(response_data["dispatch_id"], feedback_score)
+    if st.button("Submit Feedback", type="primary"):
+        with st.spinner("Submitting your feedback to the network..."):
+            # This is a slight hack for the demo. Since the backend isn't *really* tracking
+            # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
+            # This simulates the real flow where the ID would already exist from the inference step.
+            try:
+                register_url = f"{API_URL}/feedback/register_mock_dispatch"
+                requests.post(register_url, json={
+                    "dispatch_id": response_data['dispatch_id'],
+                    "experts": response_data['experts']
+                }, timeout=2)
+            except:
+                 # Ignore if it fails, the main feedback call is the important one to test
+                 pass
+
+            if send_feedback_to_backend(response_data["dispatch_id"], feedback_score):
+                time.sleep(1) # Small delay for the toast to be noticed
+                st.rerun()
