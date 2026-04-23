@@ -51,6 +51,8 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        # BOLT OPTIMIZATION: Use a set for O(1) duplicate checks in save()
+        self.vector_id_set = set(self.vector_ids)
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -81,8 +83,8 @@ class FaissVectorStore:
         if not vec_id:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
-        # Check duplicate
-        if vec_id in self.vector_ids:
+        # BOLT OPTIMIZATION: O(1) lookup using set
+        if vec_id in self.vector_id_set:
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -104,6 +106,7 @@ class FaissVectorStore:
         self.conn.commit()
         
         self.vector_ids.append(vec_id)
+        self.vector_id_set.add(vec_id)
         
         # Persist index every 100 vectors
         if idx % 100 == 0:
@@ -126,23 +129,30 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # BOLT OPTIMIZATION: Use a single batched SQL query instead of N individual queries (fix N+1 problem)
+        valid_indices = [int(i) for i in indices[0] if i != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ', '.join(['?'] * len(valid_indices))
+        cursor = self.conn.execute(
+            f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})",
+            valid_indices
+        )
+
+        # Map rows by index for fast retrieval and order preservation
+        row_map = {row[0]: row for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
+            if idx == -1: continue
             
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
+            row = row_map.get(int(idx))
             if row:
                 results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
+                    "id": row[1],
+                    "text": row[2],
+                    "metadata": row[3],
                     "score": float(score)
                 })
         
