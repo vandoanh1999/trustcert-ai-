@@ -13,3 +13,16 @@ accelerate
 bitsandbytes
 llama-cpp-python
 scikit-learn
+pycryptodome
+cryptography
+streamlit
+playwright
+pytest
+pytest-asyncio
+pandas
+qdrant-client
+neo4j-driver
+redis
+feedparser
+httpx
+six
