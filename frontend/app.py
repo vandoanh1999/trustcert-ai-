@@ -88,12 +88,18 @@ selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    help="Choose one or more specialized AI experts to handle your request."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Summarize the latest security protocols for P2P networks...",
+    help="Describe what you want the Genesis Network to do. Be as specific as possible."
+)
+st.caption(f"Instruction length: {len(user_instruction)} characters")
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", disabled=not user_instruction or not selected_experts, type="primary"):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -117,9 +123,28 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    # Dynamic sentiment feedback
+    sentiment_map = {
+        0.0: "☹️ (Poor)",
+        0.2: "😐 (Mediocre)",
+        0.5: "🙂 (Good)",
+        0.8: "😊 (Great)",
+        1.0: "🤩 (Perfect!)"
+    }
+    # Find the closest sentiment label
+    current_sentiment = "😊 (Great)" # Default for 0.75
+    for val, label in sorted(sentiment_map.items()):
+        if st.session_state.get('temp_feedback_score', 0.75) >= val:
+            current_sentiment = label
 
-    if st.button("Submit Feedback"):
+    feedback_score = st.slider(
+        f"Rating: {current_sentiment}",
+        0.0, 1.0, 0.75, 0.05,
+        key='temp_feedback_score',
+        help="Slide to rate the quality of the response from 0.0 to 1.0."
+    )
+
+    if st.button("Submit Feedback", type="primary"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
