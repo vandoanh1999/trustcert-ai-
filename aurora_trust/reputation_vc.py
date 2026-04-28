@@ -15,18 +15,31 @@ from core.config import *
 REP_DB_PATH = "aurora_reputation.json"
 VC_STORE_PATH = "aurora_vc_store.json"
 
+# BOLT OPTIMIZATION: In-memory cache for reputation data to avoid redundant disk I/O
+_REP_CACHE: Dict[str, float] = None
+
 # --- Reputation Management ---
 
 def load_reputation_db() -> Dict[str, float]:
+    global _REP_CACHE
+    if _REP_CACHE is not None:
+        return _REP_CACHE.copy()
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
+            try:
+                _REP_CACHE = json.load(f)
+                return _REP_CACHE.copy()
+            except json.JSONDecodeError:
+                return {}
     return {}
 
 def save_reputation_db(db: Dict[str, float]):
+    global _REP_CACHE
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
+    # BOLT OPTIMIZATION: Update cache whenever disk is updated
+    _REP_CACHE = db.copy()
 
 def get_reputation(expert_id: str) -> float:
     db = load_reputation_db()
