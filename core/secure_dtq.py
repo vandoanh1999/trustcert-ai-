@@ -1,10 +1,14 @@
 import hashlib
 import secrets
-from typing import Dict, List
+from typing import Dict, List, Any, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
+import json
+import time
+import asyncio
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +22,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        key = kdf.derive(password)
+        return base64.urlsafe_b64encode(key)
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -94,7 +99,7 @@ class MPCDistributedTaskQueue:
         
         # Task registry
         self.tasks: Dict[str, Dict] = {}
-        self.handlers: Dict[str, Callable] = {}
+        self.handlers: Dict[str, Any] = {}
         self.running_tasks = set()
         
         # Encryption state
@@ -231,6 +236,13 @@ class MPCDistributedTaskQueue:
         finally:
             self.running_tasks.discard(task_id)
     
+    async def _get_super_nodes(self) -> List[str]:
+        """Get list of Super Nodes from consensus"""
+        if hasattr(self.p2p, 'consensus'):
+            return self.p2p.consensus.get_super_nodes()
+        # Fallback if consensus not directly linked to P2P
+        return []
+
     async def _request_key_share(self, holder_node: str, task_id: str) -> bytes:
         """Request key share từ holder node"""
         response = await self.p2p.send_and_wait(holder_node, {
@@ -247,9 +259,27 @@ class MPCDistributedTaskQueue:
     async def handle_key_share_request(self, requester: str, task_id: str):
         """Respond to key share request"""
         if task_id in self.my_key_shares:
-            await self.p2p.send_to_peer(requester, {
+            asyncio.create_task(self.p2p.send_to_peer(requester, {
                 "type": "key_share_response",
                 "task_id": task_id,
                 "share": self.my_key_shares[task_id].hex()
-            })
+            }))
             logger.debug(f"📤 Sent key share to {requester} for task {task_id}")
+
+    def register_handler(self, task_type: str, handler: Any):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        """Worker loop"""
+        logger.info(f"👷 DTQ Worker started on {self.node_id}")
+        while True:
+            # Check for pending tasks to execute
+            for task_id, task in list(self.tasks.items()):
+                if task['status'] == 'pending' and task_id not in self.running_tasks:
+                    # Simplified: If I am in key_share_holders, I can try to execute
+                    # or if I am the one who discovered the task
+                    self.running_tasks.add(task_id)
+                    asyncio.create_task(self._execute_secure_task(task))
+
+            await asyncio.sleep(5)
