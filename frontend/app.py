@@ -91,7 +91,12 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Summarize the latest security proposals or analyze expert A's contribution...",
+    help="Provide a clear instruction for the Genesis network to execute."
+)
+st.caption(f"Character count: {len(user_instruction)}")
 
 if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
@@ -118,6 +123,21 @@ if st.session_state.last_response:
     st.write("How would you rate this response?")
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+
+    # Dynamic sentiment feedback
+    sentiment_map = {
+        (0.0, 0.2): "☹️ Poor",
+        (0.2, 0.4): "🙁 Subpar",
+        (0.4, 0.6): "😐 Acceptable",
+        (0.6, 0.8): "🙂 Good",
+        (0.8, 1.0): "🤩 Excellent"
+    }
+    sentiment_label = "😐 Acceptable"
+    for (low, high), label in sentiment_map.items():
+        if low <= feedback_score <= high:
+            sentiment_label = label
+            break
+    st.caption(f"Your rating: **{sentiment_label}**")
 
     if st.button("Submit Feedback"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
