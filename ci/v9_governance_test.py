@@ -58,21 +58,29 @@ async def main():
     message_to_sign = json.dumps(proposal_data, sort_keys=True).encode('utf8')
     architect_signature = sign_message(ARCHITECT_PRIVATE_KEY, message_to_sign)
 
-    approval_message = {
+    approval_payload = {
         "type": "ARCHITECT_APPROVAL",
         "data": {
             "proposal_id": proposal_id,
             "signature": architect_signature.hex()
         }
     }
+
+    # IMPORTANT: The message must be signed by some node (even if the Architect signs the data inside)
+    # The node's handle_p2p_message expects the outer wrapper with sender_id, public_key_pem, etc.
+    signed_message = super_node.sign_gossip_message(approval_payload)
+
     # Simulate an external broadcast to the node
-    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", {"payload": approval_message})
+    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", signed_message)
 
     # 3. Verify the final outcome
     print("\n[3] Verifying final execution...")
     # If the signature was valid, the proposal should be removed from the awaiting state
-    assert proposal_id not in super_node.awaiting_architect
-    print("  - [PASS] Proposal was executed and removed from 'awaiting_architect' state.")
+    if proposal_id not in super_node.awaiting_architect:
+        print("  - [PASS] Proposal was executed and removed from 'awaiting_architect' state.")
+    else:
+        print("  - [FAIL] Proposal still in awaiting_architect state.")
+        exit(1)
 
     print("\n--- V9 Governance Layer Self-Test Passed! ---")
 
