@@ -65,8 +65,10 @@ async def main():
             "signature": architect_signature.hex()
         }
     }
+    # Sign the message so handle_p2p_message accepts it
+    signed_approval = super_node.sign_gossip_message(approval_message)
     # Simulate an external broadcast to the node
-    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", {"payload": approval_message})
+    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", signed_approval)
 
     # 3. Verify the final outcome
     print("\n[3] Verifying final execution...")
