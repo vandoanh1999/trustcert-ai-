@@ -91,9 +91,13 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Explain quantum computing in simple terms.",
+    help="Describe what you want the Genesis network to help you with."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", type="primary", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -119,7 +123,17 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    # Dynamic sentiment mapping for micro-UX delight
+    sentiment_emoji = "😐"
+    if feedback_score >= 0.9: sentiment_emoji = "🤩 (Excellent)"
+    elif feedback_score >= 0.7: sentiment_emoji = "😊 (Good)"
+    elif feedback_score >= 0.5: sentiment_emoji = "🙂 (Fair)"
+    elif feedback_score >= 0.3: sentiment_emoji = "😐 (Average)"
+    else: sentiment_emoji = "☹️ (Poor)"
+
+    st.caption(f"Selected sentiment: **{sentiment_emoji}**")
+
+    if st.button("Submit Feedback", type="primary"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
