@@ -51,6 +51,8 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        # BOLT OPTIMIZATION: Use a set for O(1) duplicate checks
+        self.vector_ids_set = set(self.vector_ids)
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -82,7 +84,8 @@ class FaissVectorStore:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
         # Check duplicate
-        if vec_id in self.vector_ids:
+        # BOLT OPTIMIZATION: O(1) lookup in set
+        if vec_id in self.vector_ids_set:
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -104,6 +107,7 @@ class FaissVectorStore:
         self.conn.commit()
         
         self.vector_ids.append(vec_id)
+        self.vector_ids_set.add(vec_id)
         
         # Persist index every 100 vectors
         if idx % 100 == 0:
@@ -127,22 +131,27 @@ class FaissVectorStore:
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
         # Fetch metadata
+        # BOLT OPTIMIZATION: Use a single SQL IN query to avoid N+1 bottleneck
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ','.join(['?'] * len(valid_indices))
+        query_sql = f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})"
+        cursor = self.conn.execute(query_sql, valid_indices)
+
+        metadata_map = {row[0]: {"id": row[1], "text": row[2], "metadata": row[3]}
+                        for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
             if idx == -1:
                 continue
             
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
+            row = metadata_map.get(int(idx))
             if row:
                 results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
+                    **row,
                     "score": float(score)
                 })
         
