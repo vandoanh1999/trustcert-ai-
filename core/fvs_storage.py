@@ -51,6 +51,7 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        self.vector_ids_set = set(self.vector_ids) # BOLT OPTIMIZATION: O(1) duplicate check
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -82,7 +83,7 @@ class FaissVectorStore:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
         # Check duplicate
-        if vec_id in self.vector_ids:
+        if vec_id in self.vector_ids_set: # BOLT OPTIMIZATION: use set for O(1) lookup
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -104,6 +105,7 @@ class FaissVectorStore:
         self.conn.commit()
         
         self.vector_ids.append(vec_id)
+        self.vector_ids_set.add(vec_id)
         
         # Persist index every 100 vectors
         if idx % 100 == 0:
@@ -127,22 +129,25 @@ class FaissVectorStore:
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
         # Fetch metadata
+        # BOLT OPTIMIZATION: Batch fetch metadata with a single SQL query instead of N queries
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ','.join(['?'] * len(valid_indices))
+        query_str = f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})"
+        cursor = self.conn.execute(query_str, valid_indices)
+
+        metadata_map = {row[0]: (row[1], row[2], row[3]) for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
-            
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
+            if idx != -1 and int(idx) in metadata_map:
+                m = metadata_map[int(idx)]
                 results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
+                    "id": m[0],
+                    "text": m[1],
+                    "metadata": m[2],
                     "score": float(score)
                 })
         
