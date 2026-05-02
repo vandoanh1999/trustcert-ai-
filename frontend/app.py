@@ -88,12 +88,17 @@ selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    help="Choose which specialized AI experts you want to contribute to the response."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Summarize the latest proposal on network governance...",
+    help="Describe the task you want the expert network to perform."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", type="primary", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -118,6 +123,17 @@ if st.session_state.last_response:
     st.write("How would you rate this response?")
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+
+    # Dynamic sentiment feedback
+    sentiment_map = [
+        (0.9, "🤩 Exceptional"),
+        (0.7, "😊 Good"),
+        (0.5, "🙂 Satisfactory"),
+        (0.3, "😐 Neutral"),
+        (0.0, "☹️ Poor")
+    ]
+    sentiment_label = next(label for score, label in sentiment_map if feedback_score >= score)
+    st.write(f"**Your feeling:** {sentiment_label}")
 
     if st.button("Submit Feedback"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
