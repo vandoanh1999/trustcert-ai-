@@ -58,15 +58,19 @@ async def main():
     message_to_sign = json.dumps(proposal_data, sort_keys=True).encode('utf8')
     architect_signature = sign_message(ARCHITECT_PRIVATE_KEY, message_to_sign)
 
-    approval_message = {
+    approval_payload = {
         "type": "ARCHITECT_APPROVAL",
         "data": {
             "proposal_id": proposal_id,
             "signature": architect_signature.hex()
         }
     }
+
+    # Wrap in a signed gossip message to satisfy node-level security checks
+    signed_approval = super_node.sign_gossip_message(approval_payload)
+
     # Simulate an external broadcast to the node
-    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", {"payload": approval_message})
+    await super_node.handle_p2p_message(super_node.node_id, signed_approval)
 
     # 3. Verify the final outcome
     print("\n[3] Verifying final execution...")
