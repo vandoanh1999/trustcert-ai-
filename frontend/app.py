@@ -59,7 +59,7 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"Feedback ({score}/1.0) submitted successfully!", icon="✨")
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
         else:
@@ -91,9 +91,13 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Summarize the Genesis architecture and its benefits...",
+    help="Describe what you want the Genesis expert network to do. Be as specific as possible!"
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", type="primary", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -119,7 +123,25 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    # Dynamic emoji feedback for the slider
+    sentiment_mapping = {
+        0.9: "🤩 (Exceptional)",
+        0.7: "😊 (Good)",
+        0.5: "🙂 (Fair)",
+        0.3: "😐 (Poor)",
+        0.0: "☹️ (Terrible)"
+    }
+
+    # Find the appropriate emoji based on the current slider value
+    current_sentiment = "☹️ (Terrible)"
+    for threshold in sorted(sentiment_mapping.keys(), reverse=True):
+        if feedback_score >= threshold:
+            current_sentiment = sentiment_mapping[threshold]
+            break
+
+    st.markdown(f"**Your Rating:** {current_sentiment}")
+
+    if st.button("Submit Feedback", type="primary"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
