@@ -13,3 +13,6 @@ accelerate
 bitsandbytes
 llama-cpp-python
 scikit-learn
+pycryptodome
+cryptography
+six
