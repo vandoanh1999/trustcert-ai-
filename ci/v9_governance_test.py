@@ -66,7 +66,10 @@ async def main():
         }
     }
     # Simulate an external broadcast to the node
-    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", {"payload": approval_message})
+    # V9 FIX: The node expects a signed message with public_key_pem and signature
+    # However, for simulation we can just wrap it in what sign_gossip_message would produce
+    full_message = super_node.sign_gossip_message(approval_message)
+    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", full_message)
 
     # 3. Verify the final outcome
     print("\n[3] Verifying final execution...")
