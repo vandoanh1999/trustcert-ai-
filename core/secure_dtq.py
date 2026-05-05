@@ -1,9 +1,13 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import base64
+import json
+import time
+import asyncio
+from typing import Dict, List, Callable, Optional, Any
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +22,7 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -29,7 +33,8 @@ class SecureTaskPayload:
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
         """Encrypt task payload"""
-        fernet = Fernet(key)
+        key_64 = base64.urlsafe_b64encode(key)
+        fernet = Fernet(key_64)
         payload_json = json.dumps(payload).encode()
         encrypted = fernet.encrypt(payload_json)
         return encrypted
@@ -37,7 +42,8 @@ class SecureTaskPayload:
     @staticmethod
     def decrypt_payload(encrypted: bytes, key: bytes) -> dict:
         """Decrypt task payload"""
-        fernet = Fernet(key)
+        key_64 = base64.urlsafe_b64encode(key)
+        fernet = Fernet(key_64)
         decrypted = fernet.decrypt(encrypted)
         return json.loads(decrypted.decode())
 
@@ -100,6 +106,10 @@ class MPCDistributedTaskQueue:
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
     
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
@@ -253,3 +263,26 @@ class MPCDistributedTaskQueue:
                 "share": self.my_key_shares[task_id].hex()
             })
             logger.debug(f"📤 Sent key share to {requester} for task {task_id}")
+
+    async def start_worker(self):
+        """Worker loop to process tasks"""
+        while True:
+            try:
+                # BOLT OPTIMIZATION: Use list() to avoid RuntimeError: dictionary changed size during iteration
+                for task_id, task in list(self.tasks.items()):
+                    if task['status'] == 'pending' and len(self.running_tasks) < self.max_concurrent:
+                        self.running_tasks.add(task_id)
+                        task['status'] = 'running'
+                        asyncio.create_task(self._execute_secure_task(task))
+
+                await asyncio.sleep(5)
+            except Exception as e:
+                logger.error(f"Worker loop error: {e}")
+                await asyncio.sleep(5)
+
+    async def _get_super_nodes(self) -> List[str]:
+        """Helper to get super nodes for task distribution"""
+        # In a real system, this would call the consensus layer
+        if hasattr(self.p2p, 'consensus'):
+            return self.p2p.consensus.get_super_nodes()
+        return []
