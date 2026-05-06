@@ -59,7 +59,7 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"Feedback ({score}/1.0) submitted successfully!", icon='✨')
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
         else:
@@ -91,9 +91,13 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Summarize the latest P2P gossip protocol updates...",
+    help="Provide a clear instruction or question for the Genesis expert network to process."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", disabled=not user_instruction or not selected_experts, type="primary"):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -102,6 +106,7 @@ if st.button("Query Genesis", disabled=not user_instruction or not selected_expe
                 "text": response_text,
                 "experts": selected_experts
             }
+            st.rerun()
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
@@ -119,7 +124,18 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    # Dynamic sentiment indicator
+    sentiment_map = [
+        (0.9, "🤩 Exceptional"),
+        (0.7, "😊 Great"),
+        (0.5, "🙂 Good"),
+        (0.3, "😐 Okay"),
+        (0.0, "☹️ Poor")
+    ]
+    sentiment_label = next((label for score, label in sentiment_map if feedback_score >= score), "☹️ Poor")
+    st.info(f"Your rating: **{sentiment_label}**")
+
+    if st.button("Submit Feedback", type="primary"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
