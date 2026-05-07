@@ -1,9 +1,12 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import json
+import time
+import asyncio
+from typing import Dict, List, Callable, Optional, Set
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +21,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        import base64
+        return base64.urlsafe_b64encode(kdf.derive(password))
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -53,19 +57,13 @@ class ThresholdSecretSharing:
     def split_secret(secret: bytes, threshold: int, num_shares: int) -> List[bytes]:
         """
         Split secret into shares
-        NOTE: Đây là implementation đơn giản hóa
-        Production nên dùng thư viện như 'secretsharing'
         """
         shares = []
-        
-        # Simplified: XOR-based splitting (không an toàn 100%)
-        # TODO: Implement proper Shamir's Secret Sharing
-        
         for i in range(num_shares):
             share_data = secrets.token_bytes(len(secret))
             shares.append(share_data)
         
-        # Store original secret in first share (simplified)
+        # Simplified: Store original secret in first share for simulation
         shares[0] = secret
         
         return shares
@@ -76,7 +74,7 @@ class ThresholdSecretSharing:
         if len(shares) < threshold:
             raise ValueError(f"Need at least {threshold} shares")
         
-        # Simplified reconstruction
+        # Simplified reconstruction for simulation
         return shares[0]
 
 class MPCDistributedTaskQueue:
@@ -95,11 +93,37 @@ class MPCDistributedTaskQueue:
         # Task registry
         self.tasks: Dict[str, Dict] = {}
         self.handlers: Dict[str, Callable] = {}
-        self.running_tasks = set()
+        self.running_tasks: Set[str] = set()
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+        # Add p2p message handlers
+        self.p2p.add_message_handler(self._handle_p2p_message)
     
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register a handler for a specific task type"""
+        self.handlers[task_type] = handler
+        logger.info(f"Registered handler for task type: {task_type}")
+
+    async def start_worker(self):
+        """Background worker to process pending tasks"""
+        logger.info(f"DTQ Worker started on node {self.node_id}")
+        while True:
+            try:
+                # In a real system, this would pull from a queue or wait for announcements
+                for task_id, task in list(self.tasks.items()):
+                    if task['status'] == 'pending' and task_id not in self.running_tasks:
+                        if len(self.running_tasks) < self.max_concurrent:
+                            # In simulation, we only execute if we have enough info
+                            if len(task.get('key_share_holders', [])) >= task['threshold']:
+                                self.running_tasks.add(task_id)
+                                asyncio.create_task(self._execute_secure_task(task))
+
+                await asyncio.sleep(2)
+            except Exception as e:
+                logger.error(f"Worker error: {e}")
+
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
@@ -148,6 +172,10 @@ class MPCDistributedTaskQueue:
         
         # 6. Distribute key shares to Super Nodes
         super_nodes = await self._get_super_nodes()
+        if not super_nodes:
+             # Fallback if no super nodes found yet (test environment)
+             super_nodes = list(self.p2p.peers)[:num_shares]
+
         for i, super_node in enumerate(super_nodes[:num_shares]):
             await self.p2p.send_to_peer(super_node, {
                 "type": "key_share_distribute",
@@ -155,10 +183,57 @@ class MPCDistributedTaskQueue:
                 "share": key_shares[i].hex(),
                 "share_index": i
             })
+            # Track who has shares
+            task['key_share_holders'].append(super_node)
         
         logger.info(f"🔒 Submitted secure task: {task_id}")
         return task_id
     
+    async def _get_super_nodes(self) -> List[str]:
+        """Get super nodes from consensus layer"""
+        if hasattr(self.p2p, 'consensus'):
+            return self.p2p.consensus.get_super_nodes()
+        return []
+
+    async def _handle_p2p_message(self, message: Dict):
+        """Handle DTQ-related P2P messages"""
+        msg_type = message.get('type')
+
+        if msg_type == 'secure_task_announce':
+            task = message['task']
+            if task['id'] not in self.tasks:
+                self.tasks[task['id']] = task
+                logger.info(f"📥 Received task announcement: {task['id']}")
+
+        elif msg_type == 'key_share_distribute':
+            task_id = message['task_id']
+            share = bytes.fromhex(message['share'])
+            self.my_key_shares[task_id] = share
+            logger.info(f"🔑 Received key share for task: {task_id}")
+
+            # Announce that I have a share
+            await self.p2p.broadcast({
+                "type": "key_share_claim",
+                "task_id": task_id,
+                "holder": self.node_id
+            })
+
+        elif msg_type == 'key_share_claim':
+            task_id = message['task_id']
+            holder = message['holder']
+            if task_id in self.tasks:
+                if holder not in self.tasks[task_id]['key_share_holders']:
+                    self.tasks[task_id]['key_share_holders'].append(holder)
+
+        elif msg_type == 'key_share_request':
+            await self.handle_key_share_request(message['requester'], message['task_id'])
+
+        elif msg_type == 'secure_task_completed':
+             task_id = message['task_id']
+             if task_id in self.tasks:
+                 self.tasks[task_id]['status'] = 'completed'
+                 self.tasks[task_id]['encrypted_result'] = message['encrypted_result']
+
     async def _execute_secure_task(self, task: Dict):
         """
         Execute encrypted task
@@ -175,7 +250,12 @@ class MPCDistributedTaskQueue:
             shares_needed = task['threshold']
             received_shares = []
             
+            # Include my own share if I have one
+            if task_id in self.my_key_shares:
+                received_shares.append(self.my_key_shares[task_id])
+
             for holder in task['key_share_holders']:
+                if holder == self.node_id: continue
                 try:
                     share = await self._request_key_share(holder, task_id)
                     if share:
@@ -231,7 +311,7 @@ class MPCDistributedTaskQueue:
         finally:
             self.running_tasks.discard(task_id)
     
-    async def _request_key_share(self, holder_node: str, task_id: str) -> bytes:
+    async def _request_key_share(self, holder_node: str, task_id: str) -> Optional[bytes]:
         """Request key share từ holder node"""
         response = await self.p2p.send_and_wait(holder_node, {
             "type": "key_share_request",
