@@ -1,3 +1,13 @@
+import asyncio
+import time
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.consensus import ProofOfContribution
+
+logger = logging.getLogger(__name__)
+
 class DecentralizedSnapshot:
     """
     Snapshot sync KHÔNG CẦN Anchor Nodes
@@ -5,7 +15,7 @@ class DecentralizedSnapshot:
     - Mobile Nodes bootstrap từ bất kỳ Super Node nào
     """
     
-    def __init__(self, node_id: str, fvs_store, p2p_network, consensus: ProofOfContribution):
+    def __init__(self, node_id: str, fvs_store, p2p_network, consensus: 'ProofOfContribution'):
         self.node_id = node_id
         self.fvs = fvs_store
         self.p2p = p2p_network
@@ -21,7 +31,7 @@ class DecentralizedSnapshot:
                 await asyncio.sleep(self.snapshot_interval)
                 
                 # Only Super Nodes create snapshots
-                if not self.consensus.is_super_node():
+                if not getattr(self.consensus, 'is_super_node', lambda: False)():
                     continue
                 
                 snapshot_path = await self._create_snapshot()

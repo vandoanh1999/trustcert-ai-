@@ -95,7 +95,7 @@ class SecretSharer(object):
         shares = []
         for point in points:
             share = int_to_charset(point[0], cls.share_charset).zfill(1) + "-" + \
-                int_to_charset(point[1], cls.share_charset).zfill(len(secret_string))
+                int_to_charset(point[1], cls.share_charset)
             shares.append(share)
         return shares
 
@@ -110,6 +110,8 @@ class SecretSharer(object):
             y_coords.append(charset_to_int(parts[1], cls.share_charset))
         free_coefficient = lagrange_interpolate(0, x_coords, y_coords, cls.prime)
         secret_string = int_to_charset(free_coefficient, cls.share_charset)
+        if len(secret_string) % 2 != 0:
+            secret_string = "0" + secret_string
         return secret_string
 
 class PlaintextToHexSecretSharer(SecretSharer):
