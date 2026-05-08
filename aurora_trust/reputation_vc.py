@@ -8,7 +8,7 @@ import time
 import os
 import hashlib
 import hmac
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from core.config import *
 
 # --- Constants ---
@@ -17,19 +17,39 @@ VC_STORE_PATH = "aurora_vc_store.json"
 
 # --- Reputation Management ---
 
+_REP_CACHE: Optional[Dict[str, float]] = None
+
 def load_reputation_db() -> Dict[str, float]:
+    """Load reputation DB from cache or disk. Returns a copy to prevent mutation of cache."""
+    global _REP_CACHE
+    if _REP_CACHE is not None:
+        return _REP_CACHE.copy()
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
+            try:
+                _REP_CACHE = json.load(f)
+                return _REP_CACHE.copy()
+            except json.JSONDecodeError:
+                _REP_CACHE = {}
+                return {}
+    _REP_CACHE = {}
     return {}
 
 def save_reputation_db(db: Dict[str, float]):
+    """Save reputation DB to disk and update cache."""
+    global _REP_CACHE
+    _REP_CACHE = db.copy()
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
 def get_reputation(expert_id: str) -> float:
-    db = load_reputation_db()
+    """Get reputation for an expert, using cache for O(1) lookup."""
+    global _REP_CACHE
+    if _REP_CACHE is None:
+        db = load_reputation_db()
+    else:
+        db = _REP_CACHE
     return float(db.get(expert_id, 0.5))
 
 def update_reputation_with_feedback(expert_id: str, feedback_score: float) -> float:
