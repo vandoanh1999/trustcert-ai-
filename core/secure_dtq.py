@@ -1,9 +1,13 @@
+import asyncio
 import hashlib
 import secrets
-from typing import Dict, List
+import json
+import time
+import base64
+from typing import Dict, List, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +22,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        # Fernet keys must be 32 url-safe base64-encoded bytes
+        return base64.urlsafe_b64encode(kdf.derive(password))
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -87,9 +92,10 @@ class MPCDistributedTaskQueue:
     - Results được mã hóa trước khi return
     """
     
-    def __init__(self, node_id: str, p2p_network, max_concurrent: int = 3):
+    def __init__(self, node_id: str, p2p_network, consensus=None, max_concurrent: int = 3):
         self.node_id = node_id
         self.p2p = p2p_network
+        self.consensus = consensus
         self.max_concurrent = max_concurrent
         
         # Task registry
@@ -99,7 +105,25 @@ class MPCDistributedTaskQueue:
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
-    
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register handler for task type"""
+        self.handlers[task_type] = handler
+        logger.info(f"📋 Registered handler for task type: {task_type}")
+
+    async def start_worker(self):
+        """Start task worker"""
+        logger.info(f"👷 Worker started on node: {self.node_id}")
+        while True:
+            await asyncio.sleep(5)
+
+            # Simplified: Pick first pending task
+            for task_id, task in self.tasks.items():
+                if task['status'] == 'pending' and len(self.running_tasks) < self.max_concurrent:
+                    self.running_tasks.add(task_id)
+                    task['status'] = 'running'
+                    asyncio.create_task(self._execute_secure_task(task))
+
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
@@ -253,3 +277,10 @@ class MPCDistributedTaskQueue:
                 "share": self.my_key_shares[task_id].hex()
             })
             logger.debug(f"📤 Sent key share to {requester} for task {task_id}")
+
+    async def _get_super_nodes(self) -> List[str]:
+        """Lấy danh sách Super Nodes từ Consensus"""
+        # Trả về Super Nodes thực tế từ lớp đồng thuận
+        if hasattr(self.consensus, 'get_super_nodes'):
+            return self.consensus.get_super_nodes()
+        return []
