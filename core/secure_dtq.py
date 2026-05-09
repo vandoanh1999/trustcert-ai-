@@ -1,9 +1,13 @@
+import asyncio
+import json
+import time
 import hashlib
 import secrets
-from typing import Dict, List
+from typing import Dict, List, Callable
+import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +22,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        key = kdf.derive(password)
+        return base64.urlsafe_b64encode(key)
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -94,7 +99,7 @@ class MPCDistributedTaskQueue:
         
         # Task registry
         self.tasks: Dict[str, Dict] = {}
-        self.handlers: Dict[str, Callable] = {}
+        self.handlers: Dict[str, any] = {}
         self.running_tasks = set()
         
         # Encryption state
@@ -253,3 +258,25 @@ class MPCDistributedTaskQueue:
                 "share": self.my_key_shares[task_id].hex()
             })
             logger.debug(f"📤 Sent key share to {requester} for task {task_id}")
+
+    def register_handler(self, task_type: str, handler: any):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        """Start worker loop"""
+        logger.info(f"👷 Worker started on {self.node_id}")
+        while True:
+            await asyncio.sleep(5)
+            # Find pending tasks
+            for task_id, task in list(self.tasks.items()):
+                if task['status'] == 'pending' and task_id not in self.running_tasks:
+                    if len(self.running_tasks) < self.max_concurrent:
+                        self.running_tasks.add(task_id)
+                        asyncio.create_task(self._execute_secure_task(task))
+
+    async def _get_super_nodes(self):
+        """Helper to get super nodes from consensus"""
+        if hasattr(self.p2p, 'consensus'):
+            return self.p2p.consensus.get_super_nodes()
+        return []

@@ -65,8 +65,13 @@ async def main():
             "signature": architect_signature.hex()
         }
     }
+
+    # V9 FIX: Wrap the architect message in a valid signed envelope from a node
+    broadcaster = DecentralizedNode(network.add_node())
+    signed_msg = broadcaster.sign_gossip_message(approval_message)
+
     # Simulate an external broadcast to the node
-    await super_node.handle_p2p_message("ARCHITECT_BROADCASTER", {"payload": approval_message})
+    await super_node.handle_p2p_message(broadcaster.node_id, signed_msg)
 
     # 3. Verify the final outcome
     print("\n[3] Verifying final execution...")
