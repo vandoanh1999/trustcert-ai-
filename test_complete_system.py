@@ -6,7 +6,8 @@ import logging
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.fvs_storage_v2 import FaissVectorStore
+import time
+from core.fvs_storage import FaissVectorStore
 from core.p2p_gossip import GossipP2P
 from core.secure_dtq import MPCDistributedTaskQueue
 from core.consensus import ProofOfContribution
