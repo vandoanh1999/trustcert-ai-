@@ -10,6 +10,7 @@ import hashlib
 import hmac
 from typing import Dict, Any, List
 from core.config import *
+from typing import Optional
 
 # --- Constants ---
 REP_DB_PATH = "aurora_reputation.json"
@@ -17,14 +18,27 @@ VC_STORE_PATH = "aurora_vc_store.json"
 
 # --- Reputation Management ---
 
+# BOLT OPTIMIZATION: In-memory cache for reputation database to avoid redundant disk I/O
+_REP_CACHE: Optional[Dict[str, float]] = None
+
 def load_reputation_db() -> Dict[str, float]:
+    global _REP_CACHE
+    if _REP_CACHE is not None:
+        return _REP_CACHE.copy()
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
+            try:
+                _REP_CACHE = json.load(f)
+                return _REP_CACHE.copy()
+            except json.JSONDecodeError:
+                return {}
+    _REP_CACHE = {}
     return {}
 
 def save_reputation_db(db: Dict[str, float]):
+    global _REP_CACHE
+    _REP_CACHE = db.copy()
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
