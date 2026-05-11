@@ -59,9 +59,11 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"Feedback ({score}/1.0) submitted successfully!", icon='✨')
+            time.sleep(1)
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
+            st.rerun()
         else:
             st.error(f"Failed to submit feedback. Server responded with: {response.status_code}")
             st.json(response.json())
@@ -69,7 +71,7 @@ def send_feedback_to_backend(dispatch_id, score):
         st.error(f"Error connecting to the backend: {e}")
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Genesis Hub", layout="wide")
+st.set_page_config(page_title="Genesis Hub", page_icon="🌌", layout="wide")
 
 st.title("🌌 Genesis Hub")
 st.caption("The Portal to the Genesis Symbiotic Network")
@@ -91,9 +93,13 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Summarize the latest research on symbiotic networks...",
+    help="Describe the task or question you want the expert network to address."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", type="primary", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -119,7 +125,19 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    # Dynamic Sentiment Indicator
+    if feedback_score >= 0.9:
+        st.write("🤩 **Exceptional!**")
+    elif feedback_score >= 0.7:
+        st.write("😊 **Great!**")
+    elif feedback_score >= 0.5:
+        st.write("😐 **Acceptable**")
+    elif feedback_score >= 0.3:
+        st.write("😕 **Poor**")
+    else:
+        st.write("😞 **Sub-par**")
+
+    if st.button("Submit Feedback", type="primary"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
