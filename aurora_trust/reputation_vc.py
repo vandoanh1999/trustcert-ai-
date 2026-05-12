@@ -8,34 +8,52 @@ import time
 import os
 import hashlib
 import hmac
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from core.config import *
 
 # --- Constants ---
 REP_DB_PATH = "aurora_reputation.json"
 VC_STORE_PATH = "aurora_vc_store.json"
 
+# BOLT OPTIMIZATION: In-memory cache for reputation data to avoid repeated disk I/O
+_REP_CACHE: Optional[Dict[str, float]] = None
+
 # --- Reputation Management ---
 
 def load_reputation_db() -> Dict[str, float]:
+    global _REP_CACHE
+    if _REP_CACHE is not None:
+        return _REP_CACHE.copy()
+
     if os.path.exists(REP_DB_PATH):
         with open(REP_DB_PATH, "r") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
+            try:
+                _REP_CACHE = json.load(f)
+                return _REP_CACHE.copy()
+            except json.JSONDecodeError:
+                _REP_CACHE = {}
+                return {}
+    _REP_CACHE = {}
     return {}
 
 def save_reputation_db(db: Dict[str, float]):
+    global _REP_CACHE
+    _REP_CACHE = db.copy()
     with open(REP_DB_PATH, "w") as f:
         json.dump(db, f, indent=2)
 
 def get_reputation(expert_id: str) -> float:
-    db = load_reputation_db()
-    return float(db.get(expert_id, 0.5))
+    global _REP_CACHE
+    if _REP_CACHE is None:
+        load_reputation_db()
+    return float(_REP_CACHE.get(expert_id, 0.5))
 
 def update_reputation_with_feedback(expert_id: str, feedback_score: float) -> float:
     old_score = get_reputation(expert_id)
     clamped_feedback = max(0.0, min(1.0, feedback_score))
     new_score = (1 - REPUTATION_EMA_LEARNING_RATE) * old_score + REPUTATION_EMA_LEARNING_RATE * clamped_feedback
+
+    # Efficiently update cache and disk
     db = load_reputation_db()
     db[expert_id] = new_score
     save_reputation_db(db)
