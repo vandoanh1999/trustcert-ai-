@@ -13,9 +13,9 @@ API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
 
 # Friendly names for experts to improve UX
 EXPERT_MAP = {
-    "dummy_adapters/expert_A/adapter_model.bin": "Research Assistant (Expert A)",
-    "dummy_adapters/expert_B/adapter_model.bin": "Data Analyst (Expert B)",
-    "dummy_adapters/expert_C/adapter_model.bin": "Security Auditor (Expert C)"
+    "dummy_adapters/expert_A/adapter_model.bin": "🔍 Research Assistant (Expert A)",
+    "dummy_adapters/expert_B/adapter_model.bin": "📊 Data Analyst (Expert B)",
+    "dummy_adapters/expert_C/adapter_model.bin": "🛡️ Security Auditor (Expert C)"
 }
 
 # --- Helper Functions ---
@@ -91,9 +91,13 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., 'Analyze the recent network throughput trends and identify potential bottlenecks.'",
+    help="Provide a clear instruction for the Genesis experts to process."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", disabled=not user_instruction or not selected_experts, type="primary"):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -117,9 +121,28 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
+    # Dynamic sentiment feedback for the slider
+    sentiment_map = [
+        (0.0, "😫 Terrible"),
+        (0.2, "😞 Poor"),
+        (0.4, "😐 Average"),
+        (0.6, "😊 Good"),
+        (0.8, "🤩 Great"),
+        (1.0, "💎 Exceptional")
+    ]
+
+    # We use a placeholder to update the label dynamically
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    # Calculate the label based on the current slider value
+    current_sentiment = "Average"
+    for threshold, label in sentiment_map:
+        if feedback_score >= threshold:
+            current_sentiment = label
+
+    st.markdown(f"**Your Rating:** {current_sentiment} ({feedback_score})")
+
+    if st.button("Submit Feedback", type="primary"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
