@@ -13,9 +13,9 @@ API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
 
 # Friendly names for experts to improve UX
 EXPERT_MAP = {
-    "dummy_adapters/expert_A/adapter_model.bin": "Research Assistant (Expert A)",
-    "dummy_adapters/expert_B/adapter_model.bin": "Data Analyst (Expert B)",
-    "dummy_adapters/expert_C/adapter_model.bin": "Security Auditor (Expert C)"
+    "dummy_adapters/expert_A/adapter_model.bin": "🔍 Research Assistant (Expert A)",
+    "dummy_adapters/expert_B/adapter_model.bin": "📊 Data Analyst (Expert B)",
+    "dummy_adapters/expert_C/adapter_model.bin": "🛡️ Security Auditor (Expert C)"
 }
 
 # --- Helper Functions ---
@@ -91,9 +91,13 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Explain the benefits of decentralized AI networks...",
+    help="Your query will be dispatched to the selected expert nodes for processing."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("Query Genesis", type="primary", disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -117,9 +121,13 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    feedback_score = st.slider(
+        "Rating (0.0 = Bad, 1.0 = Perfect)",
+        0.0, 1.0, 0.75, 0.05,
+        help="Your feedback directly impacts the reputation and trust score of the contributing experts in the Aurora system."
+    )
 
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback", type="primary"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
