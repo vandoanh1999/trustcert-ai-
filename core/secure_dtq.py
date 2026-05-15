@@ -1,10 +1,15 @@
+import asyncio
 import hashlib
 import secrets
 from typing import Dict, List
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
+import json
+import time
+from typing import Callable
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +23,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        key = kdf.derive(password)
+        return base64.urlsafe_b64encode(key)
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -99,6 +105,33 @@ class MPCDistributedTaskQueue:
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+        # Register P2P handlers
+        if hasattr(self.p2p, 'register_handler'):
+            self.p2p.register_handler(self._handle_p2p_message)
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+        logger.info(f"📋 Registered handler for task type: {task_type}")
+
+    async def start_worker(self):
+        """Start task worker loop"""
+        logger.info(f"👷 Secure DTQ worker started on {self.node_id}")
+        while True:
+            await asyncio.sleep(1)
+            # Worker logic for picking up tasks
+            pass
+
+    async def _handle_p2p_message(self, message: Dict):
+        """Handle incoming P2P messages for DTQ"""
+        msg_type = message.get('type')
+        if msg_type == 'secure_task_announce':
+            task = message['task']
+            self.tasks[task['id']] = task
+        elif msg_type == 'key_share_distribute':
+            task_id = message['task_id']
+            self.my_key_shares[task_id] = bytes.fromhex(message['share'])
     
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
@@ -231,6 +264,12 @@ class MPCDistributedTaskQueue:
         finally:
             self.running_tasks.discard(task_id)
     
+    async def _get_super_nodes(self) -> List[str]:
+        """Get list of super nodes from consensus"""
+        if hasattr(self.p2p, 'consensus'):
+             return self.p2p.consensus.get_super_nodes()
+        return []
+
     async def _request_key_share(self, holder_node: str, task_id: str) -> bytes:
         """Request key share từ holder node"""
         response = await self.p2p.send_and_wait(holder_node, {
