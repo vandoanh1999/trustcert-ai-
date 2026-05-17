@@ -16,10 +16,11 @@ class GossipP2P:
     - Lightweight communication
     """
     
-    def __init__(self, node_id: str, port: int, fvs_store=None):
+    def __init__(self, node_id: str, port: int, fvs_store=None, consensus=None):
         self.node_id = node_id
         self.port = port
         self.fvs_store = fvs_store
+        self.consensus = consensus
         
         # Peer management
         self.peers: Set[str] = set()

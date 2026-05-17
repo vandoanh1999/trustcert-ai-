@@ -6,7 +6,7 @@ import logging
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.fvs_storage_v2 import FaissVectorStore
+from core.fvs_storage import FaissVectorStore
 from core.p2p_gossip import GossipP2P
 from core.secure_dtq import MPCDistributedTaskQueue
 from core.consensus import ProofOfContribution
@@ -25,8 +25,9 @@ class CompleteTestNode:
         
         # Initialize all components
         self.fvs = FaissVectorStore(node_id, dimension=384)
-        self.p2p = GossipP2P(node_id, port, self.fvs)
-        self.consensus = ProofOfContribution(node_id, self.p2p)
+        self.consensus = ProofOfContribution(node_id, None)  # Will update p2p later
+        self.p2p = GossipP2P(node_id, port, self.fvs, self.consensus)
+        self.consensus.p2p = self.p2p  # Update with circular ref
         self.consensus.fvs_store = self.fvs
         self.dtq = MPCDistributedTaskQueue(node_id, self.p2p)
         self.snapshot = DecentralizedSnapshot(node_id, self.fvs, self.p2p, self.consensus)
@@ -218,9 +219,6 @@ async def main():
     
     logger.info("\n" + "="*60 + "\n")
     logger.info("✅ COMPLETE SYSTEM TEST FINISHED!")
-    logger.info("Press Ctrl+C to exit...")
-    
-    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     try:
