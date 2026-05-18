@@ -1,9 +1,13 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import time
+import json
+import base64
+import asyncio
+from typing import Dict, List, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +22,7 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -29,7 +33,8 @@ class SecureTaskPayload:
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
         """Encrypt task payload"""
-        fernet = Fernet(key)
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
         payload_json = json.dumps(payload).encode()
         encrypted = fernet.encrypt(payload_json)
         return encrypted
@@ -37,7 +42,8 @@ class SecureTaskPayload:
     @staticmethod
     def decrypt_payload(encrypted: bytes, key: bytes) -> dict:
         """Decrypt task payload"""
-        fernet = Fernet(key)
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
         decrypted = fernet.decrypt(encrypted)
         return json.loads(decrypted.decode())
 
@@ -96,9 +102,13 @@ class MPCDistributedTaskQueue:
         self.tasks: Dict[str, Dict] = {}
         self.handlers: Dict[str, Callable] = {}
         self.running_tasks = set()
-        
+
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
     
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
@@ -244,6 +254,19 @@ class MPCDistributedTaskQueue:
         
         return None
     
+    async def start_worker(self):
+        """Background: Listen for tasks"""
+        logger.info(f"👷 DTQ Worker started on {self.node_id}")
+        while True:
+            await asyncio.sleep(10)
+            # Simplified worker logic for test
+
+    async def _get_super_nodes(self) -> List[str]:
+        """Get Super Nodes for task distribution"""
+        # In a real system, this would query the consensus module
+        # For now, we return peers as a fallback
+        return list(self.p2p.peers)
+
     async def handle_key_share_request(self, requester: str, task_id: str):
         """Respond to key share request"""
         if task_id in self.my_key_shares:
