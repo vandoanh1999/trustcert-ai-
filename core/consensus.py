@@ -1,6 +1,7 @@
 import time
 import hashlib
 import json
+import asyncio
 from typing import Dict, List, Set
 from dataclasses import dataclass
 import logging
@@ -98,8 +99,11 @@ class ProofOfContribution:
         # 3. Storage Score (từ FVS)
         # Get từ FaissVectorStore
         if hasattr(self, 'fvs_store') and self.fvs_store:
-            storage_mb = self.fvs_store.data_dir.stat().st_size / (1024 * 1024)
-            self.my_metrics.storage_score = min(1.0, storage_mb / 10240)  # Max 10GB
+            try:
+                storage_mb = self.fvs_store.data_dir.stat().st_size / (1024 * 1024)
+                self.my_metrics.storage_score = min(1.0, storage_mb / 10240)  # Max 10GB
+            except:
+                self.my_metrics.storage_score = 0.1
         
         # 4. Contribution Score (weighted average)
         weights = {
