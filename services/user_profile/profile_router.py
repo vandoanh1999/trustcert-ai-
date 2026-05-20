@@ -2,6 +2,9 @@ from enum import Enum
 from dataclasses import dataclass
 import time
 import logging
+import hashlib
+from typing import List, Dict, Set, Optional
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +166,8 @@ class ProfileBasedRouter:
                     logger.info(f"⬆️ User {user_id} upgraded to STABLE")
             
             if profile.total_queries > 1000 and profile.contribution_score > 0.8:
-                if profile.tier == UserTier.STABLE:profile.tier = UserTier.VIP_PRO
+                if profile.tier == UserTier.STABLE:
+                    profile.tier = UserTier.VIP_PRO
                     logger.info(f"⬆️ User {user_id} upgraded to VIP PRO")
         
         elif event == 'contribution':
