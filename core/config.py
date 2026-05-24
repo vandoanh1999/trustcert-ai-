@@ -29,3 +29,14 @@ REPUTATION_EMA_LEARNING_RATE = 0.1
 
 # --- Ecosystem Rover & Training ---
 # (No configurable constants for the simulation yet)
+
+class Settings:
+    def __init__(self):
+        self.ENABLE_FVS = True
+        self.FVS_NODE_ID = "node_main"
+        self.EMBEDDING_MODEL_DIM = 384
+        self.FVS_RELAY_NODES = ""
+        self.FVS_P2P_PORT = 8001
+
+def get_settings():
+    return Settings()
