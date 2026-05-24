@@ -51,6 +51,7 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        self.vector_ids_set = set(self.vector_ids)  # BOLT OPTIMIZATION: O(1) duplicate checks
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -81,8 +82,8 @@ class FaissVectorStore:
         if not vec_id:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
-        # Check duplicate
-        if vec_id in self.vector_ids:
+        # BOLT OPTIMIZATION: Use O(1) set lookup instead of O(N) list scan
+        if vec_id in self.vector_ids_set:
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -101,9 +102,11 @@ class FaissVectorStore:
             INSERT INTO vectors (idx, id, text, metadata)
             VALUES (?, ?, ?, ?)
         """, (idx, vec_id, text, str(metadata) if metadata else None))
-        self.conn.commit()
+
+        # BOLT OPTIMIZATION: Deferred commit to match index persistence (major I/O win)
         
         self.vector_ids.append(vec_id)
+        self.vector_ids_set.add(vec_id)
         
         # Persist index every 100 vectors
         if idx % 100 == 0:
@@ -126,19 +129,23 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # BOLT OPTIMIZATION: Batch metadata retrieval using a single SQL query (O(1) vs O(K) roundtrips)
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ', '.join(['?'] * len(valid_indices))
+        cursor = self.conn.execute(
+            f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})",
+            valid_indices
+        )
+        metadata_map = {row[0]: row[1:] for row in cursor}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
-            
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
+            idx_int = int(idx)
+            if idx_int in metadata_map:
+                row = metadata_map[idx_int]
                 results.append({
                     "id": row[0],
                     "text": row[1],
@@ -151,8 +158,10 @@ class FaissVectorStore:
     def _persist_index(self):
         """Save index to disk"""
         try:
+            # BOLT OPTIMIZATION: Batch SQL commit with FAISS persistence
+            self.conn.commit()
             faiss.write_index(self.index, str(self.index_path))
-            logger.debug("Index persisted to disk")
+            logger.debug("Index and metadata persisted to disk")
         except Exception as e:
             logger.error(f"Failed to persist index: {e}")
     
