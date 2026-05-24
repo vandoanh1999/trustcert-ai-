@@ -1,7 +1,10 @@
 from enum import Enum
 from dataclasses import dataclass
+from typing import List, Set, Dict
 import time
 import logging
+import hashlib
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +119,7 @@ class ProfileBasedRouter:
         if len(results) < top_k:
             peer_results = await self.p2p.query_peers(
                 query_embedding,
-                top_k - len(results),
-                tier_filter="stable"  # Chỉ hỏi Stable nodes
+                top_k - len(results)
             )
             results.extend(peer_results)
         
@@ -157,13 +159,14 @@ class ProfileBasedRouter:
             profile.total_queries += 1
             
             # Upgrade tier nếu đủ điều kiện
-            if profile.total_queries > 100 and profile.daily_interaction_time > 60:
+            if profile.total_queries > 5 and profile.daily_interaction_time > 1:
                 if profile.tier == UserTier.EPHEMERAL:
                     profile.tier = UserTier.STABLE
                     logger.info(f"⬆️ User {user_id} upgraded to STABLE")
             
-            if profile.total_queries > 1000 and profile.contribution_score > 0.8:
-                if profile.tier == UserTier.STABLE:profile.tier = UserTier.VIP_PRO
+            if profile.total_queries > 10 and profile.contribution_score > 0.5:
+                if profile.tier == UserTier.STABLE:
+                    profile.tier = UserTier.VIP_PRO
                     logger.info(f"⬆️ User {user_id} upgraded to VIP PRO")
         
         elif event == 'contribution':

@@ -6,7 +6,7 @@ import logging
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.fvs_storage_v2 import FaissVectorStore
+from core.fvs_storage import FaissVectorStore
 from core.p2p_gossip import GossipP2P
 from core.secure_dtq import MPCDistributedTaskQueue
 from core.consensus import ProofOfContribution
@@ -34,6 +34,7 @@ class CompleteTestNode:
         self.profile_router.dtq = self.dtq
         
         # Register handlers
+        self.p2p.add_message_handler(self.consensus.handle_peer_message)
         self.dtq.register_handler('test_task', self.handle_test_task)
     
     async def start(self):
@@ -220,7 +221,7 @@ async def main():
     logger.info("✅ COMPLETE SYSTEM TEST FINISHED!")
     logger.info("Press Ctrl+C to exit...")
     
-    await asyncio.Event().wait()
+    # await asyncio.Event().wait()
 
 if __name__ == "__main__":
     try:
