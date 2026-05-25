@@ -51,6 +51,7 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        self.vector_ids_set = set(self.vector_ids)
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -81,8 +82,8 @@ class FaissVectorStore:
         if not vec_id:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
-        # Check duplicate
-        if vec_id in self.vector_ids:
+        # BOLT OPTIMIZATION: Use O(1) set lookup for duplicate check instead of O(N) list scan
+        if vec_id in self.vector_ids_set:
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -101,14 +102,15 @@ class FaissVectorStore:
             INSERT INTO vectors (idx, id, text, metadata)
             VALUES (?, ?, ?, ?)
         """, (idx, vec_id, text, str(metadata) if metadata else None))
-        self.conn.commit()
         
-        self.vector_ids.append(vec_id)
-        
-        # Persist index every 100 vectors
+        # BOLT OPTIMIZATION: Only commit every 100 vectors or on close to avoid I/O bottleneck
         if idx % 100 == 0:
+            self.conn.commit()
             self._persist_index()
         
+        self.vector_ids.append(vec_id)
+        self.vector_ids_set.add(vec_id)
+
         logger.debug(f"Saved vector: {vec_id}")
         return vec_id
     
@@ -126,18 +128,26 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # BOLT OPTIMIZATION: Batch metadata retrieval using IN clause to solve N+1 query problem
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ', '.join(['?'] * len(valid_indices))
+        cursor = self.conn.execute(
+            f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})",
+            valid_indices
+        )
+
+        # Map results by idx to preserve FAISS ordering
+        metadata_map = {row[0]: row[1:] for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
             if idx == -1:
                 continue
             
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
+            row = metadata_map.get(int(idx))
             if row:
                 results.append({
                     "id": row[0],
@@ -170,5 +180,6 @@ class FaissVectorStore:
     
     def close(self):
         """Cleanup"""
+        self.conn.commit() # Ensure last batch is committed
         self._persist_index()
         self.conn.close()
