@@ -1,3 +1,4 @@
+from core.consensus import ProofOfContribution
 class DecentralizedSnapshot:
     """
     Snapshot sync KHÔNG CẦN Anchor Nodes
