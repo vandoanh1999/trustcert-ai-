@@ -1,8 +1,11 @@
 fastapi
 uvicorn
+streamlit
 numpy
 faiss-cpu
 pydantic
+pycryptodome
+cryptography
 sentence-transformers
 torch
 safetensors
