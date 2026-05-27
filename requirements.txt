@@ -6,6 +6,10 @@ pydantic
 sentence-transformers
 torch
 safetensors
+pycryptodome
+six
+cryptography
+streamlit
 
 transformers
 peft
