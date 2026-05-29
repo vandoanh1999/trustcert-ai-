@@ -13,3 +13,9 @@ accelerate
 bitsandbytes
 llama-cpp-python
 scikit-learn
+pycryptodome
+six
+cryptography
+streamlit
+pandas
+requests
