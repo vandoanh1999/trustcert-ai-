@@ -3,6 +3,9 @@ uvicorn
 numpy
 faiss-cpu
 pydantic
+six
+requests
+pycryptodome
 sentence-transformers
 torch
 safetensors
