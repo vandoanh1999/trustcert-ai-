@@ -51,6 +51,7 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        self.vector_ids_set = set(self.vector_ids) # BOLT OPTIMIZATION: O(1) duplicate checks
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -82,7 +83,7 @@ class FaissVectorStore:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
         # Check duplicate
-        if vec_id in self.vector_ids:
+        if vec_id in self.vector_ids_set: # BOLT OPTIMIZATION: O(1) lookup
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -101,12 +102,14 @@ class FaissVectorStore:
             INSERT INTO vectors (idx, id, text, metadata)
             VALUES (?, ?, ?, ?)
         """, (idx, vec_id, text, str(metadata) if metadata else None))
-        self.conn.commit()
+
+        # BOLT OPTIMIZATION: Removed per-insertion commit. Commits now happen in _persist_index every 100 vectors.
         
         self.vector_ids.append(vec_id)
+        self.vector_ids_set.add(vec_id)
         
         # Persist index every 100 vectors
-        if idx % 100 == 0:
+        if self.index.ntotal % 100 == 0: # BOLT OPTIMIZATION: Batch persist every 100 vectors
             self._persist_index()
         
         logger.debug(f"Saved vector: {vec_id}")
@@ -127,34 +130,37 @@ class FaissVectorStore:
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
         # Fetch metadata
+        # BOLT OPTIMIZATION: Batch metadata retrieval to solve N+1 query problem
+        valid_indices = [int(i) for i in indices[0] if i != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ', '.join(['?'] * len(valid_indices))
+        cursor = self.conn.execute(
+            f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})",
+            valid_indices
+        )
+
+        metadata_map = {row[0]: {"id": row[1], "text": row[2], "metadata": row[3]} for row in cursor}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
-            
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
-                results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
-                    "score": float(score)
-                })
+            idx_int = int(idx)
+            if idx_int in metadata_map:
+                res = metadata_map[idx_int].copy()
+                res["score"] = float(score)
+                results.append(res)
         
         return results
     
     def _persist_index(self):
-        """Save index to disk"""
+        """Save index to disk and commit metadata"""
         try:
+            self.conn.commit() # BOLT OPTIMIZATION: Batch metadata commit
             faiss.write_index(self.index, str(self.index_path))
-            logger.debug("Index persisted to disk")
+            logger.debug("Index and metadata persisted to disk")
         except Exception as e:
-            logger.error(f"Failed to persist index: {e}")
+            logger.error(f"Failed to persist index/metadata: {e}")
     
     def get_stats(self) -> Dict:
         """Get storage statistics"""
