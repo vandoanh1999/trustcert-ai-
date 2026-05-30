@@ -88,12 +88,17 @@ selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    help="Choose one or more specialized expert models to process your request."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Explain the benefits of decentralized AI in the Genesis network.",
+    help="Specify what you would like the expert network to do or answer."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("🚀 Query Genesis", type="primary", use_container_width=True, disabled=not user_instruction or not selected_experts):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -117,9 +122,13 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    feedback_score = st.slider(
+        "Rating (0.0 = Bad, 1.0 = Perfect)",
+        0.0, 1.0, 0.75, 0.05,
+        help="Rate the quality and relevance of the response to help improve the network."
+    )
 
-    if st.button("Submit Feedback"):
+    if st.button("✅ Submit Feedback", use_container_width=True):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
