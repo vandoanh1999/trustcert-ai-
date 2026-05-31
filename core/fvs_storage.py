@@ -126,26 +126,34 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # BOLT OPTIMIZATION: Batched metadata retrieval to avoid N+1 query problem.
+        # This reduces SQLite overhead significantly when top_k is large.
+        valid_indices = [int(i) for i in indices[0] if i != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ', '.join(['?'] * len(valid_indices))
+        cursor = self.conn.execute(
+            f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})",
+            valid_indices
+        )
+        metadata_map = {row[0]: row[1:] for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
             if idx == -1:
                 continue
             
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
+            idx_int = int(idx)
+            if idx_int in metadata_map:
+                row = metadata_map[idx_int]
                 results.append({
                     "id": row[0],
                     "text": row[1],
                     "metadata": row[2],
                     "score": float(score)
                 })
-        
+
         return results
     
     def _persist_index(self):
