@@ -126,19 +126,25 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # BOLT OPTIMIZATION: Resolve N+1 query problem by batching metadata retrieval
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ','.join(['?'] * len(valid_indices))
+        cursor = self.conn.execute(
+            f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})",
+            valid_indices
+        )
+
+        # Map idx to metadata for O(1) lookup during result assembly
+        metadata_map = {row[0]: row[1:] for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
-            
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
+            idx_int = int(idx)
+            if idx_int in metadata_map:
+                row = metadata_map[idx_int]
                 results.append({
                     "id": row[0],
                     "text": row[1],
