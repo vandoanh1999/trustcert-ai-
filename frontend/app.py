@@ -25,7 +25,8 @@ def query_genesis_backend(instruction, experts):
     call a dispatch endpoint that uses the Chimera Core. For this PoC,
     we'll simulate the response and get a dispatch_id.
     """
-    st.info(f"Querying with experts: {experts}...")
+    readable_experts = [EXPERT_MAP.get(e, e) for e in experts]
+    st.info(f"Querying with experts: {', '.join(readable_experts)}...")
 
     # This is a simulation. The real Chimera Core would be running this.
     # We are directly using the feedback endpoint's recording function
@@ -88,12 +89,18 @@ selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    help="Choose one or more specialized expert models to handle your request.",
+    placeholder="Choose your experts..."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Explain the benefits of decentralized AI networks...",
+    help="Provide clear and specific instructions for the expert network."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button("🚀 Query Genesis", type="primary", disabled=not user_instruction or not selected_experts, help="Send your request to the Genesis expert network"):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -119,7 +126,7 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    if st.button("⭐ Submit Feedback"):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
