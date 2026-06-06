@@ -1,15 +1,18 @@
 from enum import Enum
 from dataclasses import dataclass
+from typing import List, Dict, Set, Optional
 import time
 import logging
+import hashlib
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 class UserTier(Enum):
     """User tiers based on behavior"""
-    EPHEMERAL = "ephemeral"  # Hỏi ất ơ
-    STABLE = "stable"  # High engagement
-    VIP_PRO = "vip_pro"  # Super users
+    EPHEMERAL = "ephemeral"
+    STABLE = "stable"
+    VIP_PRO = "vip_pro"
 
 @dataclass
 class UserProfile:
@@ -23,7 +26,7 @@ class UserProfile:
     last_active: float
     
     # Pre-fetch optimization
-    pre_computed_topics: Set[str] = None
+    pre_computed_topics: Optional[Set[str]] = None
     cache_hit_rate: float = 0.0
 
 class ProfileBasedRouter:
@@ -34,10 +37,11 @@ class ProfileBasedRouter:
     - VIP_PRO: Super Nodes only, dedicated cache
     """
     
-    def __init__(self, fvs_store, p2p_network, consensus):
+    def __init__(self, fvs_store, p2p_network, consensus, dtq=None):
         self.fvs = fvs_store
         self.p2p = p2p_network
         self.consensus = consensus
+        self.dtq = dtq
         
         # User profiles
         self.profiles: Dict[str, UserProfile] = {}
@@ -105,9 +109,6 @@ class ProfileBasedRouter:
         
         results = []
         
-        # 1. Check pre-computed cache (nếu query match với preferred topics)
-        # ... (implementation)
-        
         # 2. Local search
         local_results = self.fvs.search(query_embedding, top_k)
         results.extend(local_results)
@@ -163,7 +164,8 @@ class ProfileBasedRouter:
                     logger.info(f"⬆️ User {user_id} upgraded to STABLE")
             
             if profile.total_queries > 1000 and profile.contribution_score > 0.8:
-                if profile.tier == UserTier.STABLE:profile.tier = UserTier.VIP_PRO
+                if profile.tier == UserTier.STABLE:
+                    profile.tier = UserTier.VIP_PRO
                     logger.info(f"⬆️ User {user_id} upgraded to VIP PRO")
         
         elif event == 'contribution':
@@ -186,10 +188,11 @@ class ProfileBasedRouter:
     async def schedule_pre_computation(self, user_id: str):
         """
         Schedule pre-computation for STABLE users
-        - Runs during off-peak hours
         """
+        if not self.dtq:
+            return
+
         profile = await self._get_profile(user_id)
-        
         if profile.tier != UserTier.STABLE:
             return
         
@@ -198,16 +201,11 @@ class ProfileBasedRouter:
         if not topics:
             return
         
-        # Submit pre-compute tasks to DTQ
+        # Submit pre-compute tasks to DTQ (mocked call)
         for topic in topics:
             await self.dtq.submit_task(
                 task_type='pre_compute_rag',
-                payload={
-                    'user_id': user_id,
-                    'topic': topic
-                },
-                priority=TaskPriority.LOW,
-                schedule_time='off_peak'  # 10PM - 6AM
+                payload={'user_id': user_id, 'topic': topic}
             )
         
         logger.info(f"📅 Scheduled pre-computation for {user_id}: {topics}")
