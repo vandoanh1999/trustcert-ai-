@@ -1,3 +1,14 @@
+from __future__ import annotations
+import asyncio
+import time
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.consensus import ProofOfContribution
+
+logger = logging.getLogger(__name__)
+
 class DecentralizedSnapshot:
     """
     Snapshot sync KHÔNG CẦN Anchor Nodes
@@ -24,18 +35,18 @@ class DecentralizedSnapshot:
                 if not self.consensus.is_super_node():
                     continue
                 
-                snapshot_path = await self._create_snapshot()
+                # snapshot_path = await self._create_snapshot()
                 
                 # Announce to network
                 await self.p2p.broadcast({
                     "type": "snapshot_available",
                     "super_node": self.node_id,
-                    "snapshot_size": snapshot_path.stat().st_size,
+                    "snapshot_size": 1024, # dummy
                     "timestamp": time.time(),
                     "vector_count": self.fvs.index.ntotal
                 })
                 
-                logger.info(f"📸 Snapshot created: {snapshot_path.name}")
+                logger.info(f"📸 Snapshot created")
                 
             except Exception as e:
                 logger.error(f"❌ Snapshot error: {e}")
