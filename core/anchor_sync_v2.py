@@ -1,3 +1,14 @@
+from __future__ import annotations
+import asyncio
+import time
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.consensus import ProofOfContribution
+
+logger = logging.getLogger(__name__)
+
 class DecentralizedSnapshot:
     """
     Snapshot sync KHÔNG CẦN Anchor Nodes
@@ -66,3 +77,12 @@ class DecentralizedSnapshot:
                 logger.warning(f"⚠️ Bootstrap failed from {super_node}: {e}")
         
         logger.error("❌ All bootstrap attempts failed")
+
+    async def _create_snapshot(self):
+        """Mock create snapshot"""
+        # In real, this would dump FVS and DB
+        from pathlib import Path
+        dummy = Path(f"./data/fvs/{self.node_id}/snapshot_{int(time.time())}.zip")
+        dummy.parent.mkdir(parents=True, exist_ok=True)
+        dummy.touch()
+        return dummy

@@ -50,9 +50,16 @@ class FaissVectorStore:
         self._init_db()
         
         # Vector ID mapping
-        self.vector_ids = self._load_vector_ids()
+        # BOLT OPTIMIZATION: Use a set for O(1) duplicate checks and a list for ordered access
+        self.vector_ids_list = self._load_vector_ids()
+        self.vector_ids_set = set(self.vector_ids_list)
         
-        logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
+        logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids_list)} vectors)")
+
+    @property
+    def vector_ids(self) -> List[str]:
+        """Maintain backward compatibility for ordered vector ID access"""
+        return self.vector_ids_list
     
     def _init_db(self):
         """Initialize metadata database"""
@@ -82,7 +89,8 @@ class FaissVectorStore:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
         # Check duplicate
-        if vec_id in self.vector_ids:
+        # BOLT OPTIMIZATION: O(1) membership check using a set instead of O(N) list search
+        if vec_id in self.vector_ids_set:
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -103,7 +111,8 @@ class FaissVectorStore:
         """, (idx, vec_id, text, str(metadata) if metadata else None))
         self.conn.commit()
         
-        self.vector_ids.append(vec_id)
+        self.vector_ids_list.append(vec_id)
+        self.vector_ids_set.add(vec_id)
         
         # Persist index every 100 vectors
         if idx % 100 == 0:
@@ -127,24 +136,31 @@ class FaissVectorStore:
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
         # Fetch metadata
+        # BOLT OPTIMIZATION: Fix N+1 query problem by fetching all metadata in a single batch
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ','.join(['?'] * len(valid_indices))
+        cursor = self.conn.execute(
+            f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})",
+            valid_indices
+        )
+
+        metadata_map = {row[0]: row for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
+            if idx == -1 or idx not in metadata_map:
                 continue
             
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
-                results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
-                    "score": float(score)
-                })
+            row = metadata_map[idx]
+            results.append({
+                "id": row[1],
+                "text": row[2],
+                "metadata": row[3],
+                "score": float(score)
+            })
         
         return results
     

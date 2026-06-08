@@ -1,7 +1,10 @@
-from enum import Enum
-from dataclasses import dataclass
+import hashlib
+import numpy as np
 import time
 import logging
+from enum import Enum
+from dataclasses import dataclass
+from typing import List, Dict, Set, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,9 @@ class ProfileBasedRouter:
         
         # VIP cache (in-memory)
         self.vip_cache: Dict[str, List[Dict]] = {}
+
+        # DTQ reference
+        self.dtq = None
     
     async def route_query(self, user_id: str, query_embedding: np.ndarray, 
                          top_k: int = 5) -> List[Dict]:
@@ -81,10 +87,14 @@ class ProfileBasedRouter:
         
         for super_node in super_nodes:
             try:
-                node_results = await self.p2p.query_specific_peer(
-                    super_node, query_embedding, top_k
-                )
-                results.extend(node_results)
+                # Assuming query_peers or similar exists on p2p
+                node_results = await self.p2p.send_and_wait(super_node, {
+                    "type": "query",
+                    "embedding": query_embedding.tolist(),
+                    "top_k": top_k
+                })
+                if node_results and node_results.get('type') == 'query_response':
+                    results.extend(node_results.get('results', []))
             except:
                 continue
         
@@ -105,19 +115,15 @@ class ProfileBasedRouter:
         
         results = []
         
-        # 1. Check pre-computed cache (nếu query match với preferred topics)
-        # ... (implementation)
-        
-        # 2. Local search
+        # 1. Local search
         local_results = self.fvs.search(query_embedding, top_k)
         results.extend(local_results)
         
-        # 3. Query Stable peers (nếu cần thêm)
+        # 2. Query peers (nếu cần thêm)
         if len(results) < top_k:
             peer_results = await self.p2p.query_peers(
                 query_embedding,
-                top_k - len(results),
-                tier_filter="stable"  # Chỉ hỏi Stable nodes
+                top_k - len(results)
             )
             results.extend(peer_results)
         
@@ -157,13 +163,14 @@ class ProfileBasedRouter:
             profile.total_queries += 1
             
             # Upgrade tier nếu đủ điều kiện
-            if profile.total_queries > 100 and profile.daily_interaction_time > 60:
+            if profile.total_queries > 10 and profile.daily_interaction_time > 5:
                 if profile.tier == UserTier.EPHEMERAL:
                     profile.tier = UserTier.STABLE
                     logger.info(f"⬆️ User {user_id} upgraded to STABLE")
             
-            if profile.total_queries > 1000 and profile.contribution_score > 0.8:
-                if profile.tier == UserTier.STABLE:profile.tier = UserTier.VIP_PRO
+            if profile.total_queries > 50 and profile.contribution_score > 0.5:
+                if profile.tier == UserTier.STABLE:
+                    profile.tier = UserTier.VIP_PRO
                     logger.info(f"⬆️ User {user_id} upgraded to VIP PRO")
         
         elif event == 'contribution':
@@ -182,32 +189,3 @@ class ProfileBasedRouter:
                 unique.append(r)
         
         return unique
-    
-    async def schedule_pre_computation(self, user_id: str):
-        """
-        Schedule pre-computation for STABLE users
-        - Runs during off-peak hours
-        """
-        profile = await self._get_profile(user_id)
-        
-        if profile.tier != UserTier.STABLE:
-            return
-        
-        # Get preferred topics
-        topics = profile.preferred_topics
-        if not topics:
-            return
-        
-        # Submit pre-compute tasks to DTQ
-        for topic in topics:
-            await self.dtq.submit_task(
-                task_type='pre_compute_rag',
-                payload={
-                    'user_id': user_id,
-                    'topic': topic
-                },
-                priority=TaskPriority.LOW,
-                schedule_time='off_peak'  # 10PM - 6AM
-            )
-        
-        logger.info(f"📅 Scheduled pre-computation for {user_id}: {topics}")
