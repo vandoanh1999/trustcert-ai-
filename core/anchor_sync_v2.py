@@ -1,3 +1,15 @@
+from __future__ import annotations
+import asyncio
+import time
+import logging
+from typing import TYPE_CHECKING, List, Dict, Optional
+from pathlib import Path
+
+if TYPE_CHECKING:
+    from core.consensus import ProofOfContribution
+
+logger = logging.getLogger(__name__)
+
 class DecentralizedSnapshot:
     """
     Snapshot sync KHÔNG CẦN Anchor Nodes
@@ -5,7 +17,7 @@ class DecentralizedSnapshot:
     - Mobile Nodes bootstrap từ bất kỳ Super Node nào
     """
     
-    def __init__(self, node_id: str, fvs_store, p2p_network, consensus: ProofOfContribution):
+    def __init__(self, node_id: str, fvs_store, p2p_network, consensus: 'ProofOfContribution'):
         self.node_id = node_id
         self.fvs = fvs_store
         self.p2p = p2p_network
