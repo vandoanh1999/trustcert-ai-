@@ -1,6 +1,7 @@
 import time
 import hashlib
 import json
+import asyncio
 from typing import Dict, List, Set
 from dataclasses import dataclass
 import logging
@@ -26,9 +27,6 @@ class NodeMetrics:
 class ProofOfContribution:
     """
     Proof-of-Contribution: Thuật toán bầu chọn Super Nodes
-    - Không cần blockchain (quá nặng)
-    - Dùng Gossip Protocol để đồng bộ metrics
-    - Election mỗi 24h hoặc khi Super Node offline
     """
     
     def __init__(self, node_id: str, p2p_network):
@@ -90,18 +88,14 @@ class ProofOfContribution:
         self.my_metrics.uptime_score = min(1.0, uptime_ratio)
         self.my_metrics.total_uptime_hours = self.total_online_time / 3600
         
-        # 2. Bandwidth Score (estimate từ relay sessions)
-        # Simplified: Assume mỗi relay session = 1 MB
+        # 2. Bandwidth Score
         estimated_bandwidth_mb = self.my_metrics.relay_sessions * 1.0
         self.my_metrics.bandwidth_score = min(1.0, estimated_bandwidth_mb / 1000)
         
-        # 3. Storage Score (từ FVS)
-        # Get từ FaissVectorStore
-        if hasattr(self, 'fvs_store') and self.fvs_store:
-            storage_mb = self.fvs_store.data_dir.stat().st_size / (1024 * 1024)
-            self.my_metrics.storage_score = min(1.0, storage_mb / 10240)  # Max 10GB
+        # 3. Storage Score
+        self.my_metrics.storage_score = 0.5
         
-        # 4. Contribution Score (weighted average)
+        # 4. Contribution Score
         weights = {
             'uptime': 0.4,
             'bandwidth': 0.3,
@@ -143,14 +137,8 @@ class ProofOfContribution:
         })
     
     async def _conduct_election(self):
-        """
-        Bầu chọn Super Nodes
-        - Top 5% nodes theo contribution_score
-        - Minimum 3 nodes, Maximum 10 nodes
-        """
+        """Bầu chọn Super Nodes"""
         logger.info("🗳️ Conducting Super Node election...")
-        
-        # Filter valid nodes (updated trong 5 phút qua)
         now = time.time()
         valid_nodes = {
             nid: metrics for nid, metrics in self.node_metrics.items()
@@ -161,21 +149,17 @@ class ProofOfContribution:
             logger.warning("⚠️ Not enough nodes for election")
             return
         
-        # Sort by contribution score
         sorted_nodes = sorted(
             valid_nodes.items(),
             key=lambda x: x[1].contribution_score,
             reverse=True
         )
         
-        # Select top 5% (min 3, max 10)
-        num_super = max(3, min(10, int(len(sorted_nodes) * 0.05)))
+        num_super = max(3, min(10, int(len(sorted_nodes) * 0.05 + 1)))
         new_super_nodes = set([nid for nid, _ in sorted_nodes[:num_super]])
         
-        # Announce results
         if new_super_nodes != self.super_nodes:
             self.super_nodes = new_super_nodes
-            
             await self.p2p.broadcast({
                 "type": "election_result",
                 "super_nodes": list(self.super_nodes),
@@ -184,21 +168,16 @@ class ProofOfContribution:
             })
             
             if self.node_id in self.super_nodes:
-                logger.info(f"🌟 ELECTED AS SUPER NODE! (Rank: {sorted_nodes.index((self.node_id, self.my_metrics)) + 1}/{len(valid_nodes)})")
-            else:
-                logger.info(f"📊 Election completed. Super Nodes: {len(self.super_nodes)}")
+                logger.info(f"🌟 ELECTED AS SUPER NODE!")
         
         self.last_election = now
     
     async def handle_peer_message(self, message: Dict):
         """Xử lý metrics updates từ peers"""
         msg_type = message.get('type')
-        
         if msg_type == 'metrics_update':
             node_id = message['node_id']
             metrics_data = message['metrics']
-            
-            # Update registry
             self.node_metrics[node_id] = NodeMetrics(
                 node_id=node_id,
                 uptime_score=metrics_data['uptime_score'],
@@ -211,25 +190,19 @@ class ProofOfContribution:
                 tasks_completed=metrics_data['tasks_completed'],
                 relay_sessions=metrics_data['relay_sessions']
             )
-        
         elif msg_type == 'election_result':
-            # Accept election result
             self.super_nodes = set(message['super_nodes'])
             self.last_election = message['timestamp']
-            
             logger.info(f"🗳️ Election result received: {len(self.super_nodes)} Super Nodes")
     
     def is_super_node(self, node_id: str = None) -> bool:
-        """Check if a node is Super Node"""
         target = node_id if node_id else self.node_id
         return target in self.super_nodes
     
     def get_super_nodes(self) -> List[str]:
-        """Get list of current Super Nodes"""
         return list(self.super_nodes)
     
     def record_contribution(self, event_type: str, count: int = 1):
-        """Record contribution event"""
         if event_type == 'vector_served':
             self.my_metrics.vectors_served += count
         elif event_type == 'task_completed':
