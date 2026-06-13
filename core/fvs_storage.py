@@ -51,6 +51,7 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        self.vector_ids_set = set(self.vector_ids)
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -81,8 +82,8 @@ class FaissVectorStore:
         if not vec_id:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
-        # Check duplicate
-        if vec_id in self.vector_ids:
+        # Check duplicate (BOLT OPTIMIZATION: O(1) set lookup)
+        if vec_id in self.vector_ids_set:
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -104,6 +105,7 @@ class FaissVectorStore:
         self.conn.commit()
         
         self.vector_ids.append(vec_id)
+        self.vector_ids_set.add(vec_id)
         
         # Persist index every 100 vectors
         if idx % 100 == 0:
@@ -126,25 +128,30 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # Fetch metadata (BOLT OPTIMIZATION: Batched retrieval to fix N+1 problem)
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        placeholders = ', '.join(['?'] * len(valid_indices))
+        query_sql = f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})"
+        cursor = self.conn.execute(query_sql, valid_indices)
+
+        metadata_map = {row[0]: row for row in cursor.fetchall()}
+
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
+            idx_int = int(idx)
+            if idx == -1 or idx_int not in metadata_map:
                 continue
             
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
-                results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
-                    "score": float(score)
-                })
+            row = metadata_map[idx_int]
+            results.append({
+                "id": row[1],
+                "text": row[2],
+                "metadata": row[3],
+                "score": float(score)
+            })
         
         return results
     
