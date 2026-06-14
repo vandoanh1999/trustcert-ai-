@@ -1,3 +1,14 @@
+from __future__ import annotations
+import asyncio
+import time
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.consensus import ProofOfContribution
+
+logger = logging.getLogger(__name__)
+
 class DecentralizedSnapshot:
     """
     Snapshot sync KHÔNG CẦN Anchor Nodes
@@ -66,3 +77,8 @@ class DecentralizedSnapshot:
                 logger.warning(f"⚠️ Bootstrap failed from {super_node}: {e}")
         
         logger.error("❌ All bootstrap attempts failed")
+
+    async def _create_snapshot(self):
+        """Dummy implementation of snapshot creation"""
+        # In a real system, this would save FVS state to a file
+        return type('DummyPath', (), {'stat': lambda self: type('DummyStat', (), {'st_size': 0})()})()
