@@ -1,9 +1,12 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import json
+import time
+import base64
+from typing import Dict, List, Callable, Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +21,15 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        key = kdf.derive(password)
+        # Fernet keys must be 32 bytes and base64-encoded
+        return base64.urlsafe_b64encode(key)
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -53,38 +58,39 @@ class ThresholdSecretSharing:
     def split_secret(secret: bytes, threshold: int, num_shares: int) -> List[bytes]:
         """
         Split secret into shares
-        NOTE: Đây là implementation đơn giản hóa
-        Production nên dùng thư viện như 'secretsharing'
+        Simplified: XOR-based splitting
         """
         shares = []
         
-        # Simplified: XOR-based splitting (không an toàn 100%)
-        # TODO: Implement proper Shamir's Secret Sharing
+        # Simple XOR split for demonstration/test
+        # Real SSS would use Lagrange interpolation
+        combined_xor = bytearray(secret)
+        for i in range(num_shares - 1):
+            share = secrets.token_bytes(len(secret))
+            shares.append(share)
+            for j in range(len(secret)):
+                combined_xor[j] ^= share[j]
         
-        for i in range(num_shares):
-            share_data = secrets.token_bytes(len(secret))
-            shares.append(share_data)
-        
-        # Store original secret in first share (simplified)
-        shares[0] = secret
-        
+        shares.append(bytes(combined_xor))
         return shares
     
     @staticmethod
     def reconstruct_secret(shares: List[bytes], threshold: int) -> bytes:
         """Reconstruct secret from shares"""
-        if len(shares) < threshold:
-            raise ValueError(f"Need at least {threshold} shares")
+        # In this simplified XOR version, we need ALL shares
+        if not shares:
+            return b""
+
+        reconstructed = bytearray(shares[0])
+        for i in range(1, len(shares)):
+            for j in range(len(reconstructed)):
+                reconstructed[j] ^= shares[i][j]
         
-        # Simplified reconstruction
-        return shares[0]
+        return bytes(reconstructed)
 
 class MPCDistributedTaskQueue:
     """
     MPC-Enabled DTQ
-    - Tasks được mã hóa
-    - Workers collaborate để decrypt và execute
-    - Results được mã hóa trước khi return
     """
     
     def __init__(self, node_id: str, p2p_network, max_concurrent: int = 3):
@@ -99,13 +105,34 @@ class MPCDistributedTaskQueue:
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+    def register_handler(self, task_type: str, handler: Callable):
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        """Worker loop to process tasks"""
+        while True:
+            await asyncio.sleep(5)
+            # Find a pending task to claim if we have capacity
+            if len(self.running_tasks) < self.max_concurrent:
+                for task_id, task in self.tasks.items():
+                    if task['status'] == 'pending' and task_id not in self.running_tasks:
+                        # Attempt to claim and execute
+                        # Simplified for test: auto-claim
+                        self.running_tasks.add(task_id)
+                        asyncio.create_task(self._execute_secure_task(task))
+                        break
+
+    async def _get_super_nodes(self) -> List[str]:
+        # This usually comes from consensus
+        if hasattr(self.p2p, 'consensus'):
+             return self.p2p.consensus.get_super_nodes()
+        return list(self.p2p.peers)[:3] # Fallback
     
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
         Submit ENCRYPTED task
-        - Payload được mã hóa
-        - Key được chia thành shares và distribute
         """
         task_id = hashlib.sha256(
             f"{task_type}:{json.dumps(payload)}:{time.time()}".encode()
@@ -120,8 +147,9 @@ class MPCDistributedTaskQueue:
         encrypted_payload = SecureTaskPayload.encrypt_payload(payload, encryption_key)
         
         # 3. Split key into shares
+        # Note: Using threshold=num_shares for our simple XOR implementation
         key_shares = ThresholdSecretSharing.split_secret(
-            encryption_key, threshold, num_shares
+            encryption_key, num_shares, num_shares
         )
         
         # 4. Create task
@@ -130,9 +158,9 @@ class MPCDistributedTaskQueue:
             "type": task_type,
             "encrypted_payload": encrypted_payload.hex(),
             "salt": salt.hex(),
-            "threshold": threshold,
+            "threshold": num_shares, # Adjusted for XOR
             "num_shares": num_shares,
-            "key_share_holders": [],  # Will be filled by claiming nodes
+            "key_share_holders": [],
             "status": "pending",
             "created_at": time.time(),
             "created_by": self.node_id
@@ -148,6 +176,7 @@ class MPCDistributedTaskQueue:
         
         # 6. Distribute key shares to Super Nodes
         super_nodes = await self._get_super_nodes()
+        holders = []
         for i, super_node in enumerate(super_nodes[:num_shares]):
             await self.p2p.send_to_peer(super_node, {
                 "type": "key_share_distribute",
@@ -155,6 +184,9 @@ class MPCDistributedTaskQueue:
                 "share": key_shares[i].hex(),
                 "share_index": i
             })
+            holders.append(super_node)
+
+        task['key_share_holders'] = holders
         
         logger.info(f"🔒 Submitted secure task: {task_id}")
         return task_id
@@ -162,9 +194,6 @@ class MPCDistributedTaskQueue:
     async def _execute_secure_task(self, task: Dict):
         """
         Execute encrypted task
-        - Request key shares từ holders
-        - Reconstruct encryption key
-        - Decrypt và execute
         """
         task_id = task['id']
         
@@ -175,7 +204,12 @@ class MPCDistributedTaskQueue:
             shares_needed = task['threshold']
             received_shares = []
             
+            # If I am a holder, add my share
+            if task_id in self.my_key_shares:
+                received_shares.append(self.my_key_shares[task_id])
+
             for holder in task['key_share_holders']:
+                if holder == self.node_id: continue
                 try:
                     share = await self._request_key_share(holder, task_id)
                     if share:
@@ -253,3 +287,5 @@ class MPCDistributedTaskQueue:
                 "share": self.my_key_shares[task_id].hex()
             })
             logger.debug(f"📤 Sent key share to {requester} for task {task_id}")
+
+import asyncio
