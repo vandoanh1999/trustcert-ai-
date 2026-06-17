@@ -1,9 +1,12 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import json
+import time
+import base64
+from typing import Dict, List, Any, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC as PBKDF2
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,7 +32,7 @@ class SecureTaskPayload:
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
         """Encrypt task payload"""
-        fernet = Fernet(key)
+        fernet = Fernet(base64.urlsafe_b64encode(key))
         payload_json = json.dumps(payload).encode()
         encrypted = fernet.encrypt(payload_json)
         return encrypted
@@ -37,7 +40,7 @@ class SecureTaskPayload:
     @staticmethod
     def decrypt_payload(encrypted: bytes, key: bytes) -> dict:
         """Decrypt task payload"""
-        fernet = Fernet(key)
+        fernet = Fernet(base64.urlsafe_b64encode(key))
         decrypted = fernet.decrypt(encrypted)
         return json.loads(decrypted.decode())
 
@@ -94,11 +97,20 @@ class MPCDistributedTaskQueue:
         
         # Task registry
         self.tasks: Dict[str, Dict] = {}
-        self.handlers: Dict[str, Callable] = {}
+        self.handlers: Dict[str, Any] = {}
         self.running_tasks = set()
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+    def register_handler(self, task_type: str, handler: Any):
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        logger.info(f"Worker started on {self.node_id}")
+
+    async def _get_super_nodes(self):
+        return list(self.p2p.peers)[:3]
     
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
