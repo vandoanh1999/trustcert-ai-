@@ -51,6 +51,8 @@ class FaissVectorStore:
         
         # Vector ID mapping
         self.vector_ids = self._load_vector_ids()
+        # BOLT OPTIMIZATION: Use set for O(1) membership checks to speed up duplicate validation
+        self.vector_ids_set = set(self.vector_ids)
         
         logger.info(f"FVS initialized: {node_id} ({len(self.vector_ids)} vectors)")
     
@@ -81,8 +83,8 @@ class FaissVectorStore:
         if not vec_id:
             vec_id = hashlib.sha256(text.encode()).hexdigest()[:16]
         
-        # Check duplicate
-        if vec_id in self.vector_ids:
+        # BOLT OPTIMIZATION: Use vector_ids_set for O(1) duplicate check
+        if vec_id in self.vector_ids_set:
             logger.debug(f"Vector exists: {vec_id}")
             return vec_id
         
@@ -104,6 +106,7 @@ class FaissVectorStore:
         self.conn.commit()
         
         self.vector_ids.append(vec_id)
+        self.vector_ids_set.add(vec_id)
         
         # Persist index every 100 vectors
         if idx % 100 == 0:
@@ -126,26 +129,41 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # BOLT OPTIMIZATION: Use batched SQL metadata retrieval to eliminate N+1 query problem
+        # Convert indices to list and filter out -1
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        # Create a mapping to maintain FAISS ranking order
+        idx_to_score = {int(idx): float(score) for idx, score in zip(indices[0], scores[0]) if idx != -1}
+
+        placeholders = ','.join(['?'] * len(valid_indices))
+        query_sql = f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})"
+
+        cursor = self.conn.execute(query_sql, valid_indices)
+        rows = cursor.fetchall()
+
+        # Map rows back to their scores and sort by original FAISS order
         results = []
-        for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
+        for row in rows:
+            idx, vec_id, text, metadata = row
+            results.append({
+                "id": vec_id,
+                "text": text,
+                "metadata": metadata,
+                "score": idx_to_score[idx],
+                "_idx": idx # Temporary for sorting
+            })
             
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
-                results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
-                    "score": float(score)
-                })
+        # Re-sort to match FAISS ranking (lower score usually means better for IP index if not normalized,
+        # but here we use cosine-like similarity with Inner Product on normalized vectors, so higher is better)
+        results.sort(key=lambda x: x['score'], reverse=True)
         
+        # Cleanup internal field
+        for r in results:
+            del r['_idx']
+
         return results
     
     def _persist_index(self):
