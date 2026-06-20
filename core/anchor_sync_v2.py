@@ -5,7 +5,7 @@ class DecentralizedSnapshot:
     - Mobile Nodes bootstrap từ bất kỳ Super Node nào
     """
     
-    def __init__(self, node_id: str, fvs_store, p2p_network, consensus: ProofOfContribution):
+    def __init__(self, node_id: str, fvs_store, p2p_network, consensus):
         self.node_id = node_id
         self.fvs = fvs_store
         self.p2p = p2p_network
