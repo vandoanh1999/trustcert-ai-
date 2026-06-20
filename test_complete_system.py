@@ -6,7 +6,7 @@ import logging
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.fvs_storage_v2 import FaissVectorStore
+from core.fvs_storage import FaissVectorStore
 from core.p2p_gossip import GossipP2P
 from core.secure_dtq import MPCDistributedTaskQueue
 from core.consensus import ProofOfContribution
@@ -57,6 +57,7 @@ class CompleteTestNode:
     
     async def handle_test_task(self, payload):
         """Test task handler"""
+        import time
         text = payload['text']
         embedding = np.random.rand(384)
         
@@ -218,9 +219,6 @@ async def main():
     
     logger.info("\n" + "="*60 + "\n")
     logger.info("✅ COMPLETE SYSTEM TEST FINISHED!")
-    logger.info("Press Ctrl+C to exit...")
-    
-    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     try:
