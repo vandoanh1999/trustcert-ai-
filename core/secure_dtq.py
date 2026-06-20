@@ -1,10 +1,14 @@
+import asyncio
 import hashlib
 import secrets
 from typing import Dict, List
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
+import json
+import time
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +22,7 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -100,6 +104,29 @@ class MPCDistributedTaskQueue:
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
     
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+        logger.info(f"📋 Registered handler for task type: {task_type}")
+
+    async def start_worker(self):
+        """Start task worker loop"""
+        logger.info(f"👷 Starting DTQ worker on {self.node_id}")
+        while True:
+            # Simple simulation: Check for pending tasks every 5 seconds
+            pending_tasks = [t for t in self.tasks.values() if t['status'] == 'pending']
+            for task in pending_tasks:
+                if task['id'] not in self.running_tasks:
+                    self.running_tasks.add(task['id'])
+                    asyncio.create_task(self._execute_secure_task(task))
+            await asyncio.sleep(5)
+
+    async def _get_super_nodes(self) -> List[str]:
+        """Get list of Super Nodes from P2P network"""
+        # Simplified: Super Nodes are peers that we know are Super Nodes
+        # In a real system, this would use consensus data
+        return list(self.p2p.peers)[:5]
+
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
