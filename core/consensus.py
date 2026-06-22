@@ -1,3 +1,4 @@
+import asyncio
 import time
 import hashlib
 import json
@@ -34,6 +35,7 @@ class ProofOfContribution:
     def __init__(self, node_id: str, p2p_network):
         self.node_id = node_id
         self.p2p = p2p_network
+        p2p_network.consensus = self
         
         # Node registry
         self.node_metrics: Dict[str, NodeMetrics] = {}
