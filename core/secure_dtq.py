@@ -1,9 +1,12 @@
+import base64
+import json
+import time
 import hashlib
 import secrets
-from typing import Dict, List
+from typing import Dict, List, Any, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +21,13 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        return base64.urlsafe_b64encode(kdf.derive(password))
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -80,6 +83,11 @@ class ThresholdSecretSharing:
         return shares[0]
 
 class MPCDistributedTaskQueue:
+    def register_handler(self, task_type: str, handler: Callable):
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        pass
     """
     MPC-Enabled DTQ
     - Tasks được mã hóa
@@ -90,16 +98,19 @@ class MPCDistributedTaskQueue:
     def __init__(self, node_id: str, p2p_network, max_concurrent: int = 3):
         self.node_id = node_id
         self.p2p = p2p_network
+        p2p_network.dtq = self
         self.max_concurrent = max_concurrent
-        
-        # Task registry
-        self.tasks: Dict[str, Dict] = {}
-        self.handlers: Dict[str, Callable] = {}
+        self.tasks = {}
+        self.handlers = {}
         self.running_tasks = set()
-        
-        # Encryption state
-        self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+        self.my_key_shares = {}
+        self.handlers: Dict[str, Callable] = {}
     
+    async def _get_super_nodes(self):
+        if hasattr(self.p2p, "consensus"):
+            return self.p2p.consensus.get_super_nodes()
+        return []
+
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
         """
