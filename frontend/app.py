@@ -69,10 +69,19 @@ def send_feedback_to_backend(dispatch_id, score):
         st.error(f"Error connecting to the backend: {e}")
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Genesis Hub", layout="wide")
+st.set_page_config(page_title="Genesis Hub", layout="wide", page_icon="🌌")
 
 st.title("🌌 Genesis Hub")
 st.caption("The Portal to the Genesis Symbiotic Network")
+
+# --- Sidebar Actions ---
+with st.sidebar:
+    st.header("Actions")
+    if st.button("🗑️ Clear Conversation", use_container_width=True):
+        st.session_state.last_response = None
+        st.toast("Conversation cleared!", icon="🌌")
+        time.sleep(1)
+        st.rerun()
 
 # --- Initialization ---
 if 'last_response' not in st.session_state:
@@ -91,9 +100,17 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., How can I optimize my local P2P node?"
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button(
+    "Query Genesis",
+    disabled=not user_instruction or not selected_experts,
+    help="Select at least one expert and provide an instruction to enable this button.",
+    use_container_width=True
+):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -119,7 +136,7 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback", use_container_width=True):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
