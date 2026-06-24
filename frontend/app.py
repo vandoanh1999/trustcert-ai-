@@ -25,7 +25,8 @@ def query_genesis_backend(instruction, experts):
     call a dispatch endpoint that uses the Chimera Core. For this PoC,
     we'll simulate the response and get a dispatch_id.
     """
-    st.info(f"Querying with experts: {experts}...")
+    friendly_names = [EXPERT_MAP.get(e, e) for e in experts]
+    st.info(f"Querying with experts: {', '.join(friendly_names)}...")
 
     # This is a simulation. The real Chimera Core would be running this.
     # We are directly using the feedback endpoint's recording function
@@ -71,6 +72,16 @@ def send_feedback_to_backend(dispatch_id, score):
 # --- Streamlit UI ---
 st.set_page_config(page_title="Genesis Hub", layout="wide")
 
+# --- Sidebar ---
+with st.sidebar:
+    st.title("Settings & Tools")
+    if st.button("🗑️ Clear Conversation", use_container_width=True):
+        st.session_state.last_response = None
+        st.session_state.dispatch_history = {}
+        st.rerun()
+    st.divider()
+    st.info("Genesis Hub connects you to a decentralized network of specialized AI experts.")
+
 st.title("🌌 Genesis Hub")
 st.caption("The Portal to the Genesis Symbiotic Network")
 
@@ -91,9 +102,16 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., How can I optimize my P2P network throughput?"
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+if st.button(
+    "Query Genesis",
+    disabled=not user_instruction or not selected_experts,
+    help="Enter an instruction and select at least one expert to enable."
+):
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
