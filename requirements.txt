@@ -6,10 +6,15 @@ pydantic
 sentence-transformers
 torch
 safetensors
-
 transformers
 peft
 accelerate
 bitsandbytes
 llama-cpp-python
 scikit-learn
+pycryptodome
+six
+streamlit
+requests
+pandas
+cryptography
