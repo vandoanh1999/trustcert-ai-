@@ -3,10 +3,11 @@ import numpy as np
 from pathlib import Path
 import sys
 import logging
+import time
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.fvs_storage_v2 import FaissVectorStore
+from core.fvs_storage import FaissVectorStore
 from core.p2p_gossip import GossipP2P
 from core.secure_dtq import MPCDistributedTaskQueue
 from core.consensus import ProofOfContribution
@@ -35,6 +36,8 @@ class CompleteTestNode:
         
         # Register handlers
         self.dtq.register_handler('test_task', self.handle_test_task)
+        self.p2p.add_message_handler(self.consensus.handle_peer_message)
+        self.p2p.add_message_handler(self.dtq.handle_p2p_message)
     
     async def start(self):
         """Start all services"""
@@ -145,10 +148,19 @@ async def main():
     # Simulate different contribution levels
     nodes[0].consensus.my_metrics.total_uptime_hours = 100
     nodes[0].consensus.my_metrics.tasks_completed = 500
+    nodes[0].consensus.my_metrics.last_updated = time.time()
     nodes[1].consensus.my_metrics.total_uptime_hours = 80
     nodes[1].consensus.my_metrics.tasks_completed = 300
+    nodes[1].consensus.my_metrics.last_updated = time.time()
+    nodes[2].consensus.my_metrics.last_updated = time.time()
     
-    await asyncio.sleep(10)  # Wait for election
+    # Manually trigger broadcast and election for testing
+    for node in nodes:
+        await node.consensus._update_self_metrics()
+        await node.consensus._broadcast_metrics()
+
+    await asyncio.sleep(2)
+    await nodes[0].consensus._conduct_election()
     
     super_nodes = nodes[0].consensus.get_super_nodes()
     logger.info(f"🌟 Super Nodes elected: {super_nodes}")
