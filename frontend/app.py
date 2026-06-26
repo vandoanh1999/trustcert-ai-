@@ -91,17 +91,34 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., 'Summarize the latest research on P2P consensus' or 'Audit this smart contract...'"
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
-    with st.spinner("Dispatching query to the expert network..."):
-        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
-        if dispatch_id and response_text:
-            st.session_state.last_response = {
-                "dispatch_id": dispatch_id,
-                "text": response_text,
-                "experts": selected_experts
-            }
+# Dynamic help text for the Query button
+query_help = None
+if not user_instruction:
+    query_help = "Please enter an instruction or question to continue."
+elif not selected_experts:
+    query_help = "Please select at least one expert to consult."
+
+col_q, col_c = st.columns([4, 1])
+with col_q:
+    if st.button("Query Genesis", disabled=not user_instruction or not selected_experts, help=query_help, use_container_width=True):
+        with st.spinner("Dispatching query to the expert network..."):
+            dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+            if dispatch_id and response_text:
+                st.session_state.last_response = {
+                    "dispatch_id": dispatch_id,
+                    "text": response_text,
+                    "experts": selected_experts
+                }
+
+with col_c:
+    if st.button("Clear", help="Clear the current response and start over.", use_container_width=True):
+        st.session_state.last_response = None
+        st.rerun()
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
@@ -117,9 +134,13 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    feedback_score = st.slider(
+        "Rating (0.0 = Bad, 1.0 = Perfect)",
+        0.0, 1.0, 0.75, 0.05,
+        help="Your feedback directly affects the reputation of the selected experts in the symbiotic loop."
+    )
 
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback", use_container_width=True):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
