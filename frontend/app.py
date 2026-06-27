@@ -18,6 +18,12 @@ EXPERT_MAP = {
     "dummy_adapters/expert_C/adapter_model.bin": "Security Auditor (Expert C)"
 }
 
+# --- Callbacks ---
+def clear_form():
+    """Safely resets the query and response state."""
+    st.session_state.last_response = None
+    st.session_state.user_instruction = ""
+
 # --- Helper Functions ---
 def query_genesis_backend(instruction, experts):
     """
@@ -59,9 +65,10 @@ def send_feedback_to_backend(dispatch_id, score):
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
         response = requests.post(feedback_url, json={"score": score})
         if response.status_code == 200:
-            st.success(f"Feedback ({score}/1.0) submitted successfully!")
+            st.toast(f"Feedback ({score}/1.0) submitted successfully!", icon="🌌")
             # Clear the last response to be ready for the next query
             st.session_state.last_response = None
+            st.rerun()
         else:
             st.error(f"Failed to submit feedback. Server responded with: {response.status_code}")
             st.json(response.json())
@@ -79,7 +86,7 @@ if 'last_response' not in st.session_state:
     st.session_state.last_response = None
 
 # --- Main Interaction Panel ---
-st.header("1. Submit a Query")
+st.header("1. 📝 Submit a Query")
 
 # For this demo, we'll let the user "choose" the experts.
 # In a real system, the Oracle Brain would do this automatically.
@@ -91,9 +98,25 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area("Enter your instruction or question:",
+                                placeholder="e.g. Analyze the latest security trends in P2P networks",
+                                key="user_instruction")
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+col_query, col_clear = st.columns([4, 1])
+
+with col_query:
+    query_btn = st.button("Query Genesis",
+                 disabled=not user_instruction or not selected_experts,
+                 use_container_width=True,
+                 help="Enter an instruction and select at least one expert to enable.")
+
+with col_clear:
+    st.button("Clear",
+              use_container_width=True,
+              help="Clear the current query and response",
+              on_click=clear_form)
+
+if query_btn:
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
@@ -106,7 +129,7 @@ if st.button("Query Genesis", disabled=not user_instruction or not selected_expe
 # --- Feedback Panel ---
 if st.session_state.last_response:
     st.divider()
-    st.header("2. Provide Feedback")
+    st.header("2. ⭐ Provide Feedback")
 
     response_data = st.session_state.last_response
 
@@ -119,7 +142,7 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback", use_container_width=True):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
