@@ -78,6 +78,13 @@ st.caption("The Portal to the Genesis Symbiotic Network")
 if 'last_response' not in st.session_state:
     st.session_state.last_response = None
 
+def clear_interaction():
+    """Resets the UI state for a fresh query."""
+    st.session_state.last_response = None
+    if 'user_instruction_input' in st.session_state:
+        st.session_state.user_instruction_input = ""
+    st.toast("Interaction cleared!")
+
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
 
@@ -88,20 +95,41 @@ selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    help="In production, Genesis automatically routes your query to the best experts."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., Analyze the security implications of the latest P2P gossip protocol update...",
+    help="Provide a detailed instruction for the Genesis experts.",
+    key="user_instruction_input"
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
-    with st.spinner("Dispatching query to the expert network..."):
-        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
-        if dispatch_id and response_text:
-            st.session_state.last_response = {
-                "dispatch_id": dispatch_id,
-                "text": response_text,
-                "experts": selected_experts
-            }
+col_q, col_c = st.columns([4, 1])
+
+with col_q:
+    query_btn_help = "Submit your instruction to the decentralized expert network."
+    if not user_instruction:
+        query_btn_help = "⚠️ Please enter an instruction first."
+    elif not selected_experts:
+        query_btn_help = "⚠️ Please select at least one expert."
+
+    if st.button("Query Genesis 🌌",
+                 disabled=not user_instruction or not selected_experts,
+                 use_container_width=True,
+                 help=query_btn_help):
+        with st.spinner("Dispatching query to the expert network..."):
+            dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+            if dispatch_id and response_text:
+                st.session_state.last_response = {
+                    "dispatch_id": dispatch_id,
+                    "text": response_text,
+                    "experts": selected_experts
+                }
+
+with col_c:
+    st.button("Clear", on_click=clear_interaction, use_container_width=True, help="Reset the interaction and clear input.")
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
@@ -117,9 +145,9 @@ if st.session_state.last_response:
 
     st.write("How would you rate this response?")
 
-    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
+    feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05, help="Your feedback directly improves expert reputation.")
 
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback", use_container_width=True, help="Send your rating to the network to update node trust scores."):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
