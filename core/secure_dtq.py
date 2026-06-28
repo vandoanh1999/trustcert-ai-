@@ -1,10 +1,13 @@
 import hashlib
 import secrets
-from typing import Dict, List
+from typing import Dict, List, Callable
+import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
+import json
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,7 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -29,7 +32,8 @@ class SecureTaskPayload:
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
         """Encrypt task payload"""
-        fernet = Fernet(key)
+        encoded_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(encoded_key)
         payload_json = json.dumps(payload).encode()
         encrypted = fernet.encrypt(payload_json)
         return encrypted
@@ -37,7 +41,8 @@ class SecureTaskPayload:
     @staticmethod
     def decrypt_payload(encrypted: bytes, key: bytes) -> dict:
         """Decrypt task payload"""
-        fernet = Fernet(key)
+        encoded_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(encoded_key)
         decrypted = fernet.decrypt(encrypted)
         return json.loads(decrypted.decode())
 
@@ -253,3 +258,18 @@ class MPCDistributedTaskQueue:
                 "share": self.my_key_shares[task_id].hex()
             })
             logger.debug(f"📤 Sent key share to {requester} for task {task_id}")
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        """Start worker loop"""
+        logger.info(f"👷 DTQ Worker started on {self.node_id}")
+        # Implementation of worker loop would go here
+
+    async def _get_super_nodes(self) -> List[str]:
+        """Get current Super Nodes"""
+        if hasattr(self.p2p, 'consensus'):
+            return self.p2p.consensus.get_super_nodes()
+        return []
