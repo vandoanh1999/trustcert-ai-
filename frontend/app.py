@@ -77,6 +77,13 @@ st.caption("The Portal to the Genesis Symbiotic Network")
 # --- Initialization ---
 if 'last_response' not in st.session_state:
     st.session_state.last_response = None
+if 'user_instruction' not in st.session_state:
+    st.session_state.user_instruction = ""
+
+def clear_ui_state():
+    """Resets the input and last response in session state."""
+    st.session_state.user_instruction = ""
+    st.session_state.last_response = None
 
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
@@ -91,17 +98,27 @@ selected_experts = st.multiselect(
     format_func=lambda x: EXPERT_MAP.get(x, x)
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    key="user_instruction",
+    placeholder="e.g., Analyze the security implications of the new consensus algorithm."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
-    with st.spinner("Dispatching query to the expert network..."):
-        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
-        if dispatch_id and response_text:
-            st.session_state.last_response = {
-                "dispatch_id": dispatch_id,
-                "text": response_text,
-                "experts": selected_experts
-            }
+btn_col1, btn_col2, _ = st.columns([1, 1, 3])
+
+with btn_col1:
+    if st.button("Query Genesis", disabled=not user_instruction or not selected_experts, use_container_width=True):
+        with st.spinner("Dispatching query to the expert network..."):
+            dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+            if dispatch_id and response_text:
+                st.session_state.last_response = {
+                    "dispatch_id": dispatch_id,
+                    "text": response_text,
+                    "experts": selected_experts
+                }
+
+with btn_col2:
+    st.button("Clear", on_click=clear_ui_state, use_container_width=True, help="Clear input and response")
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
