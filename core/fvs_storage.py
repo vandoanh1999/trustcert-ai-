@@ -113,7 +113,11 @@ class FaissVectorStore:
         return vec_id
     
     def search(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict]:
-        """Search for similar vectors"""
+        """
+        Search for similar vectors
+        BOLT OPTIMIZATION: Replaced N+1 SQLite queries with a single batched query
+        to significantly improve retrieval throughput.
+        """
         if self.index.ntotal == 0:
             return []
         
@@ -126,23 +130,29 @@ class FaissVectorStore:
         # FAISS search
         scores, indices = self.index.search(query.reshape(1, -1), min(top_k, self.index.ntotal))
         
-        # Fetch metadata
+        # Filter and prepare indices for batch retrieval
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        if not valid_indices:
+            return []
+
+        # Batch fetch metadata (O(1) database trips)
+        placeholders = ', '.join(['?'] * len(valid_indices))
+        query_sql = f"SELECT idx, id, text, metadata FROM vectors WHERE idx IN ({placeholders})"
+        cursor = self.conn.execute(query_sql, valid_indices)
+
+        # Create a mapping for quick O(1) lookup to preserve FAISS score ordering
+        metadata_map = {row[0]: (row[1], row[2], row[3]) for row in cursor.fetchall()}
+
+        # Reconstruct results list in original order
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
-            
-            cursor = self.conn.execute(
-                "SELECT id, text, metadata FROM vectors WHERE idx = ?", 
-                (int(idx),)
-            )
-            row = cursor.fetchone()
-            
-            if row:
+            idx_int = int(idx)
+            if idx_int in metadata_map:
+                id_val, text, meta = metadata_map[idx_int]
                 results.append({
-                    "id": row[0],
-                    "text": row[1],
-                    "metadata": row[2],
+                    "id": id_val,
+                    "text": text,
+                    "metadata": meta,
                     "score": float(score)
                 })
         

@@ -1,10 +1,13 @@
 import hashlib
 import secrets
-from typing import Dict, List
+from typing import Dict, List, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
+import json
+import time
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +21,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        # Fernet keys must be 32-byte URL-safe base64-encoded
+        return base64.urlsafe_b64encode(kdf.derive(password))
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -96,6 +100,14 @@ class MPCDistributedTaskQueue:
         self.tasks: Dict[str, Dict] = {}
         self.handlers: Dict[str, Callable] = {}
         self.running_tasks = set()
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        """Start task worker loop"""
+        logger.info(f"👷 DTQ worker started on {self.node_id}")
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
@@ -147,7 +159,8 @@ class MPCDistributedTaskQueue:
         })
         
         # 6. Distribute key shares to Super Nodes
-        super_nodes = await self._get_super_nodes()
+        # In this simplified version, we just use all available peers
+        super_nodes = list(self.p2p.peers)
         for i, super_node in enumerate(super_nodes[:num_shares]):
             await self.p2p.send_to_peer(super_node, {
                 "type": "key_share_distribute",
