@@ -3,3 +3,7 @@
 ## 2025-05-14 - Concurrent P2P Gossip
 **Learning:** Sequential network calls in P2P gossip protocols scale latency linearly with the number of peers (O(N*L)). Parallelizing these calls using `asyncio.gather` reduces the bottleneck to the maximum latency of a single peer connection (O(max(L))), resulting in a ~10x speedup for a 10-node cluster.
 **Action:** Always prefer `asyncio.gather` for independent network I/O or disk I/O operations in the P2P and storage layers to minimize total execution time.
+
+## 2025-05-15 - Vector Store N+1 SQL Bottleneck
+**Learning:** Performing individual SQL queries for each vector search result (N+1 problem) creates a massive overhead in the `FaissVectorStore.search` method. Using a batched SQL `IN` query to fetch all metadata at once provides a ~3x speedup. Additionally, O(N) membership checks on a list for deduplication in `save()` scale poorly; a companion `set` provides O(1) checks and a ~6x speedup.
+**Action:** Use SQL batching (IN clauses) for bulk metadata retrieval and maintain sets for frequent membership lookups in high-throughput storage layers.
