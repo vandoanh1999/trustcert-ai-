@@ -12,6 +12,7 @@ Released under the MIT License.
 import six
 from six.moves import range
 import string
+import secrets
 
 # --- Helper functions originally from utilitybelt ---
 def int_to_charset(n, charset):
@@ -38,10 +39,8 @@ def random_polynomial(degree, intercept, upper_bound):
         raise ValueError('Degree must be a non-negative integer.')
     coefficients = [intercept]
     for i in range(degree):
-        random_coeff = six.integer_types[-1].from_bytes(
-            six.binary_type(string.printable.encode('ascii')),
-            byteorder='big'
-        ) % upper_bound
+        # V9 FIX: Use cryptographically secure random numbers
+        random_coeff = secrets.randbelow(upper_bound)
         coefficients.append(random_coeff)
     return coefficients
 
@@ -95,7 +94,7 @@ class SecretSharer(object):
         shares = []
         for point in points:
             share = int_to_charset(point[0], cls.share_charset).zfill(1) + "-" + \
-                int_to_charset(point[1], cls.share_charset).zfill(len(secret_string))
+                int_to_charset(point[1], cls.share_charset).zfill(int(len(secret_string)))
             shares.append(share)
         return shares
 
@@ -104,12 +103,16 @@ class SecretSharer(object):
         if not isinstance(shares, list):
             raise ValueError("Shares must be a list of strings.")
         x_coords, y_coords = [], []
+        # Find maximum length of a share to pad the recovered secret
+        max_len = 0
         for share in shares:
             parts = share.split('-')
             x_coords.append(charset_to_int(parts[0], cls.share_charset))
             y_coords.append(charset_to_int(parts[1], cls.share_charset))
+            max_len = max(max_len, len(parts[1]))
+
         free_coefficient = lagrange_interpolate(0, x_coords, y_coords, cls.prime)
-        secret_string = int_to_charset(free_coefficient, cls.share_charset)
+        secret_string = int_to_charset(free_coefficient, cls.share_charset).zfill(max_len)
         return secret_string
 
 class PlaintextToHexSecretSharer(SecretSharer):

@@ -1,9 +1,12 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import time
+import json
+import asyncio
+from typing import Dict, List, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +21,14 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        import base64
+        return base64.urlsafe_b64encode(kdf.derive(password))
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -99,6 +103,17 @@ class MPCDistributedTaskQueue:
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+
+    async def start_worker(self):
+        """Start DTQ worker loop"""
+        logger.info(f"👷 DTQ Worker started: {self.node_id}")
+        # Simplified: Just keep the loop running for the simulation
+        while True:
+            await asyncio.sleep(10)
     
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
@@ -231,6 +246,13 @@ class MPCDistributedTaskQueue:
         finally:
             self.running_tasks.discard(task_id)
     
+    async def _get_super_nodes(self) -> List[str]:
+        """Lấy danh sách Super Nodes từ P2P network"""
+        # Giả định P2P network có reference đến consensus
+        if hasattr(self.p2p, 'consensus'):
+            return self.p2p.consensus.get_super_nodes()
+        return []
+
     async def _request_key_share(self, holder_node: str, task_id: str) -> bytes:
         """Request key share từ holder node"""
         response = await self.p2p.send_and_wait(holder_node, {
