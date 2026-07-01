@@ -1,7 +1,10 @@
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
 import logging
+import hashlib
+import numpy as np
+from typing import List, Set, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +22,11 @@ class UserProfile:
     daily_interaction_time: float  # minutes
     total_queries: int
     contribution_score: float  # 0.0 - 1.0
-    preferred_topics: List[str]
-    last_active: float
+    preferred_topics: List[str] = field(default_factory=list)
+    last_active: float = field(default_factory=time.time)
     
     # Pre-fetch optimization
-    pre_computed_topics: Set[str] = None
+    pre_computed_topics: Set[str] = field(default_factory=set)
     cache_hit_rate: float = 0.0
 
 class ProfileBasedRouter:
@@ -38,6 +41,7 @@ class ProfileBasedRouter:
         self.fvs = fvs_store
         self.p2p = p2p_network
         self.consensus = consensus
+        self.dtq = None
         
         # User profiles
         self.profiles: Dict[str, UserProfile] = {}
@@ -81,10 +85,14 @@ class ProfileBasedRouter:
         
         for super_node in super_nodes:
             try:
-                node_results = await self.p2p.query_specific_peer(
-                    super_node, query_embedding, top_k
-                )
-                results.extend(node_results)
+                # Assuming query_peers or similar exists
+                node_results = await self.p2p.send_and_wait(super_node, {
+                    "type": "query",
+                    "embedding": query_embedding.tolist(),
+                    "top_k": top_k
+                })
+                if node_results and node_results.get('type') == 'query_response':
+                    results.extend(node_results.get('results', []))
             except:
                 continue
         
@@ -105,19 +113,15 @@ class ProfileBasedRouter:
         
         results = []
         
-        # 1. Check pre-computed cache (nếu query match với preferred topics)
-        # ... (implementation)
-        
-        # 2. Local search
+        # 1. Local search
         local_results = self.fvs.search(query_embedding, top_k)
         results.extend(local_results)
         
-        # 3. Query Stable peers (nếu cần thêm)
+        # 2. Query peers (nếu cần thêm)
         if len(results) < top_k:
             peer_results = await self.p2p.query_peers(
                 query_embedding,
-                top_k - len(results),
-                tier_filter="stable"  # Chỉ hỏi Stable nodes
+                top_k - len(results)
             )
             results.extend(peer_results)
         
@@ -163,7 +167,8 @@ class ProfileBasedRouter:
                     logger.info(f"⬆️ User {user_id} upgraded to STABLE")
             
             if profile.total_queries > 1000 and profile.contribution_score > 0.8:
-                if profile.tier == UserTier.STABLE:profile.tier = UserTier.VIP_PRO
+                if profile.tier == UserTier.STABLE:
+                    profile.tier = UserTier.VIP_PRO
                     logger.info(f"⬆️ User {user_id} upgraded to VIP PRO")
         
         elif event == 'contribution':
@@ -190,7 +195,7 @@ class ProfileBasedRouter:
         """
         profile = await self._get_profile(user_id)
         
-        if profile.tier != UserTier.STABLE:
+        if profile.tier != UserTier.STABLE or not self.dtq:
             return
         
         # Get preferred topics
@@ -200,14 +205,13 @@ class ProfileBasedRouter:
         
         # Submit pre-compute tasks to DTQ
         for topic in topics:
-            await self.dtq.submit_task(
-                task_type='pre_compute_rag',
-                payload={
-                    'user_id': user_id,
-                    'topic': topic
-                },
-                priority=TaskPriority.LOW,
-                schedule_time='off_peak'  # 10PM - 6AM
-            )
+            if hasattr(self.dtq, 'submit_task'):
+                await self.dtq.submit_task(
+                    task_type='pre_compute_rag',
+                    payload={
+                        'user_id': user_id,
+                        'topic': topic
+                    }
+                )
         
         logger.info(f"📅 Scheduled pre-computation for {user_id}: {topics}")
