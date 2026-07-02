@@ -1,9 +1,12 @@
+import asyncio
 import hashlib
+import json
+import time
 import secrets
-from typing import Dict, List
+from typing import Dict, List, Callable, Any
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +21,7 @@ class SecureTaskPayload:
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
         """Generate encryption key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -99,6 +102,36 @@ class MPCDistributedTaskQueue:
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register task handler"""
+        self.handlers[task_type] = handler
+        logger.info(f"📋 Registered handler for task: {task_type}")
+
+    async def start_worker(self):
+        """Start task worker loop"""
+        logger.info(f"👷 DTQ Worker started: {self.node_id}")
+        while True:
+            await asyncio.sleep(5)
+            # Simulate worker loop logic
+
+    async def _get_super_nodes(self) -> List[str]:
+        """Get list of super nodes"""
+        # Simulation: just return some peers (which are addresses)
+        return list(self.p2p.peers)[:3]
+
+    async def _request_key_share(self, holder_node: str, task_id: str) -> bytes:
+        """Request key share từ holder node"""
+        response = await self.p2p.send_and_wait(holder_node, {
+            "type": "key_share_request",
+            "task_id": task_id,
+            "requester": self.node_id
+        })
+
+        if response and response.get('type') == 'key_share_response':
+            return bytes.fromhex(response['share'])
+
+        return None
     
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
@@ -114,7 +147,10 @@ class MPCDistributedTaskQueue:
         # 1. Generate encryption key
         password = secrets.token_bytes(32)
         salt = secrets.token_bytes(16)
-        encryption_key = SecureTaskPayload.generate_key(password, salt)
+        raw_key = SecureTaskPayload.generate_key(password, salt)
+        # BOLT: Convert to 32 url-safe base64-encoded bytes for Fernet
+        import base64
+        encryption_key = base64.urlsafe_b64encode(raw_key)
         
         # 2. Encrypt payload
         encrypted_payload = SecureTaskPayload.encrypt_payload(payload, encryption_key)
