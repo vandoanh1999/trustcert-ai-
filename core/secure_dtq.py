@@ -1,10 +1,14 @@
 import hashlib
 import secrets
-from typing import Dict, List
+import json
+import time
+import base64
+from typing import Dict, List, Callable
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC as PBKDF2
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +28,8 @@ class SecureTaskPayload:
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        key_bytes = kdf.derive(password)
+        return base64.urlsafe_b64encode(key_bytes)
     
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
@@ -99,6 +104,18 @@ class MPCDistributedTaskQueue:
         
         # Encryption state
         self.my_key_shares: Dict[str, bytes] = {}  # {task_id: my_share}
+
+    def register_handler(self, task_type: str, handler: Callable):
+        """Register handler for task type"""
+        self.handlers[task_type] = handler
+        logger.info(f"📋 Registered handler for task type: {task_type}")
+
+    async def start_worker(self):
+        """Start worker loop to process tasks"""
+        logger.info(f"👷 DTQ Worker started on {self.node_id}")
+        while True:
+            # Simplified: just a dummy loop for simulation
+            await asyncio.sleep(1)
     
     async def submit_secure_task(self, task_type: str, payload: dict,
                                  threshold: int = 2, num_shares: int = 3) -> str:
@@ -146,8 +163,8 @@ class MPCDistributedTaskQueue:
             "task": task
         })
         
-        # 6. Distribute key shares to Super Nodes
-        super_nodes = await self._get_super_nodes()
+        # 6. Distribute key shares to Super Nodes (Mocking _get_super_nodes)
+        super_nodes = [] # Mocked for now
         for i, super_node in enumerate(super_nodes[:num_shares]):
             await self.p2p.send_to_peer(super_node, {
                 "type": "key_share_distribute",
