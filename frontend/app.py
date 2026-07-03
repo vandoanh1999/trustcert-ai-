@@ -78,30 +78,58 @@ st.caption("The Portal to the Genesis Symbiotic Network")
 if 'last_response' not in st.session_state:
     st.session_state.last_response = None
 
+# For this demo, we'll let the user "choose" the experts.
+available_experts = list(EXPERT_MAP.keys())
+
+def reset_ui():
+    """Callback to reset the UI state."""
+    st.session_state.instruction_input = ""
+    st.session_state.expert_selection = available_experts[:2]
+    st.session_state.last_response = None
+
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
 
-# For this demo, we'll let the user "choose" the experts.
-# In a real system, the Oracle Brain would do this automatically.
-available_experts = list(EXPERT_MAP.keys())
+# In a real system, the Oracle Brain would select experts automatically.
 selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    key="expert_selection"
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., How can I optimize the peer-to-peer gossip latency?",
+    key="instruction_input"
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
-    with st.spinner("Dispatching query to the expert network..."):
-        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
-        if dispatch_id and response_text:
-            st.session_state.last_response = {
-                "dispatch_id": dispatch_id,
-                "text": response_text,
-                "experts": selected_experts
-            }
+col1, col2 = st.columns(2)
+
+with col1:
+    query_help = "Dispatch your instruction to the selected experts."
+    if not user_instruction:
+        query_help = "Please enter an instruction before querying."
+    elif not selected_experts:
+        query_help = "Please select at least one expert."
+
+    if st.button("Query Genesis",
+                 disabled=not user_instruction or not selected_experts,
+                 help=query_help,
+                 use_container_width=True):
+        with st.spinner("Dispatching query to the expert network..."):
+            dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+            if dispatch_id and response_text:
+                st.session_state.last_response = {
+                    "dispatch_id": dispatch_id,
+                    "text": response_text,
+                    "experts": selected_experts
+                }
+                st.rerun()
+
+with col2:
+    st.button("Clear", on_click=reset_ui, help="Reset inputs and clear the last response.", use_container_width=True)
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
@@ -119,7 +147,9 @@ if st.session_state.last_response:
 
     feedback_score = st.slider("Rating (0.0 = Bad, 1.0 = Perfect)", 0.0, 1.0, 0.75, 0.05)
 
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback",
+                 help="Submit your rating to improve the network's trust engine.",
+                 use_container_width=True):
         # This is a slight hack for the demo. Since the backend isn't *really* tracking
         # our mocked dispatch IDs, we'll quickly register it *just before* sending feedback.
         # This simulates the real flow where the ID would already exist from the inference step.
