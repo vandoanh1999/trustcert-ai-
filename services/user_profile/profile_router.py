@@ -2,6 +2,9 @@ from enum import Enum
 from dataclasses import dataclass
 import time
 import logging
+import hashlib
+import numpy as np
+from typing import List, Dict, Set, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -10,6 +13,11 @@ class UserTier(Enum):
     EPHEMERAL = "ephemeral"  # Hỏi ất ơ
     STABLE = "stable"  # High engagement
     VIP_PRO = "vip_pro"  # Super users
+
+class TaskPriority(Enum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
 
 @dataclass
 class UserProfile:
@@ -81,10 +89,15 @@ class ProfileBasedRouter:
         
         for super_node in super_nodes:
             try:
-                node_results = await self.p2p.query_specific_peer(
-                    super_node, query_embedding, top_k
+                node_results = await self.p2p.send_and_wait(
+                    super_node, {
+                        "type": "query",
+                        "embedding": query_embedding.tolist(),
+                        "top_k": top_k
+                    }
                 )
-                results.extend(node_results)
+                if node_results and node_results.get('type') == 'query_response':
+                    results.extend(node_results['results'])
             except:
                 continue
         
@@ -116,8 +129,7 @@ class ProfileBasedRouter:
         if len(results) < top_k:
             peer_results = await self.p2p.query_peers(
                 query_embedding,
-                top_k - len(results),
-                tier_filter="stable"  # Chỉ hỏi Stable nodes
+                top_k - len(results)
             )
             results.extend(peer_results)
         
@@ -163,7 +175,8 @@ class ProfileBasedRouter:
                     logger.info(f"⬆️ User {user_id} upgraded to STABLE")
             
             if profile.total_queries > 1000 and profile.contribution_score > 0.8:
-                if profile.tier == UserTier.STABLE:profile.tier = UserTier.VIP_PRO
+                if profile.tier == UserTier.STABLE:
+                    profile.tier = UserTier.VIP_PRO
                     logger.info(f"⬆️ User {user_id} upgraded to VIP PRO")
         
         elif event == 'contribution':
@@ -182,7 +195,7 @@ class ProfileBasedRouter:
                 unique.append(r)
         
         return unique
-    
+
     async def schedule_pre_computation(self, user_id: str):
         """
         Schedule pre-computation for STABLE users
@@ -200,14 +213,14 @@ class ProfileBasedRouter:
         
         # Submit pre-compute tasks to DTQ
         for topic in topics:
-            await self.dtq.submit_task(
+            await self.dtq.submit_secure_task(
                 task_type='pre_compute_rag',
                 payload={
                     'user_id': user_id,
                     'topic': topic
                 },
-                priority=TaskPriority.LOW,
-                schedule_time='off_peak'  # 10PM - 6AM
+                threshold=1, # Simplified for pre-compute
+                num_shares=1
             )
         
         logger.info(f"📅 Scheduled pre-computation for {user_id}: {topics}")
