@@ -1,3 +1,13 @@
+from __future__ import annotations
+import asyncio
+import time
+import logging
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from core.consensus import ProofOfContribution
+
+logger = logging.getLogger(__name__)
+
 class DecentralizedSnapshot:
     """
     Snapshot sync KHÔNG CẦN Anchor Nodes
