@@ -19,6 +19,12 @@ EXPERT_MAP = {
 }
 
 # --- Helper Functions ---
+def reset_ui():
+    """Resets the UI state for a new query."""
+    st.session_state.user_instruction = ""
+    st.session_state.selected_experts = []
+    st.session_state.last_response = None
+
 def query_genesis_backend(instruction, experts):
     """
     Simulates a query to the backend. In a real V7 system, this would
@@ -88,20 +94,43 @@ selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
     default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    key="selected_experts",
+    help="Choose one or more specialized expert models to handle your request."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., 'Analyze the security of this smart contract' or 'Explain quantum entanglement'",
+    key="user_instruction",
+    help="Provide the specific task or question you want the expert network to address."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
-    with st.spinner("Dispatching query to the expert network..."):
-        dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
-        if dispatch_id and response_text:
-            st.session_state.last_response = {
-                "dispatch_id": dispatch_id,
-                "text": response_text,
-                "experts": selected_experts
-            }
+col_query, col_clear, col_spacer = st.columns([1, 1, 3])
+
+with col_query:
+    if st.button(
+        "Query Genesis",
+        disabled=not user_instruction or not selected_experts,
+        help="Dispatch your query to the selected experts. Requires an instruction and at least one expert.",
+        use_container_width=True
+    ):
+        with st.spinner("Dispatching query to the expert network..."):
+            dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
+            if dispatch_id and response_text:
+                st.session_state.last_response = {
+                    "dispatch_id": dispatch_id,
+                    "text": response_text,
+                    "experts": selected_experts
+                }
+
+with col_clear:
+    st.button(
+        "Clear",
+        on_click=reset_ui,
+        help="Reset the input fields and clear the last response.",
+        use_container_width=True
+    )
 
 # --- Feedback Panel ---
 if st.session_state.last_response:
