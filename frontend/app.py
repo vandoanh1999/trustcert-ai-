@@ -77,6 +77,16 @@ st.caption("The Portal to the Genesis Symbiotic Network")
 # --- Initialization ---
 if 'last_response' not in st.session_state:
     st.session_state.last_response = None
+if 'user_instruction' not in st.session_state:
+    st.session_state.user_instruction = ""
+if 'selected_experts' not in st.session_state:
+    st.session_state.selected_experts = list(EXPERT_MAP.keys())[:2]
+
+def reset_ui():
+    """Resets the UI state to default values."""
+    st.session_state.user_instruction = ""
+    st.session_state.selected_experts = list(EXPERT_MAP.keys())[:2]
+    st.session_state.last_response = None
 
 # --- Main Interaction Panel ---
 st.header("1. Submit a Query")
@@ -87,13 +97,37 @@ available_experts = list(EXPERT_MAP.keys())
 selected_experts = st.multiselect(
     "Select Experts to Consult (simulation):",
     options=available_experts,
-    default=available_experts[:2],
-    format_func=lambda x: EXPERT_MAP.get(x, x)
+    key="selected_experts",
+    format_func=lambda x: EXPERT_MAP.get(x, x),
+    help="Select one or more AI experts to handle your request."
 )
 
-user_instruction = st.text_area("Enter your instruction or question:")
+user_instruction = st.text_area(
+    "Enter your instruction or question:",
+    placeholder="e.g., 'Analyze the security of this smart contract' or 'Explain the latest research in quantum computing'",
+    key="user_instruction",
+    help="Describe what you want the Genesis Network to do."
+)
 
-if st.button("Query Genesis", disabled=not user_instruction or not selected_experts):
+col1, col2, _ = st.columns([1, 1, 3])
+
+with col1:
+    query_btn = st.button(
+        "Query Genesis",
+        disabled=not user_instruction or not selected_experts,
+        help="Submit your query to the expert network. Requires an instruction and at least one expert.",
+        use_container_width=True
+    )
+
+with col2:
+    st.button(
+        "Clear",
+        on_click=reset_ui,
+        help="Clear the current query and results to start fresh.",
+        use_container_width=True
+    )
+
+if query_btn:
     with st.spinner("Dispatching query to the expert network..."):
         dispatch_id, response_text = query_genesis_backend(user_instruction, selected_experts)
         if dispatch_id and response_text:
