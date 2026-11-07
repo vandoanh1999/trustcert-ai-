@@ -5,6 +5,7 @@ This version includes the final fix for the Anti-Sybil regression.
 """
 import asyncio
 import json
+import os
 from enum import Enum
 from typing import Dict, Any, List
 
@@ -24,7 +25,8 @@ class DecentralizedNode:
         # ... (init is the same)
         self.p2p = p2p_node; self.tier = NodeTier.EPHEMERAL
         self.fingerprint = get_hardware_fingerprint()
-        self.private_key = generate_keys(self.fingerprint)
+        # Random key; set GENESIS_NODE_KEY_PATH to persist it (file is created with 0600).
+        self.private_key = generate_keys(key_path=os.getenv("GENESIS_NODE_KEY_PATH"))
         self.public_key = self.private_key.public_key()
         self.node_id = self.p2p.node_id
         self.trust_score = get_reputation(self.fingerprint)

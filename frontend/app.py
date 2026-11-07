@@ -4,12 +4,14 @@ Genesis Core V7: The Portal Pillar (Genesis Hub)
 A user-friendly Streamlit interface for non-technical users to interact
 with the Genesis ecosystem.
 """
+import os
 import streamlit as st
 import requests
 import time
 
 # --- Configuration ---
-API_URL = "http://127.0.0.1:8000" # The URL of our FastAPI backend
+API_URL = os.getenv("GENESIS_API_URL", "http://127.0.0.1:8000")  # The URL of our FastAPI backend
+API_HEADERS = {"X-API-Key": os.getenv("GENESIS_API_KEY", "")}
 
 # Friendly names for experts to improve UX
 EXPERT_MAP = {
@@ -57,7 +59,7 @@ def send_feedback_to_backend(dispatch_id, score):
     """Sends the user's feedback score to the backend API."""
     try:
         feedback_url = f"{API_URL}/feedback/{dispatch_id}"
-        response = requests.post(feedback_url, json={"score": score})
+        response = requests.post(feedback_url, headers=API_HEADERS, json={"score": score})
         if response.status_code == 200:
             st.success(f"Feedback ({score}/1.0) submitted successfully!")
             # Clear the last response to be ready for the next query
@@ -125,7 +127,7 @@ if st.session_state.last_response:
         # This simulates the real flow where the ID would already exist from the inference step.
         try:
             register_url = f"{API_URL}/feedback/register_mock_dispatch" # We need to create this endpoint
-            requests.post(register_url, json={
+            requests.post(register_url, headers=API_HEADERS, json={
                 "dispatch_id": response_data['dispatch_id'],
                 "experts": response_data['experts']
             })

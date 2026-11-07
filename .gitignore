@@ -37,3 +37,11 @@ dummy_adapters/
 # Log files
 *.log
 logs/
+
+# --- Secrets: never commit keys or env files ---
+*.pem
+*.key
+*_private_key*
+.env
+.env.*
+!.env.example

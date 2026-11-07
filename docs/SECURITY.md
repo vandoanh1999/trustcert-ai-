@@ -23,3 +23,12 @@ This document outlines security considerations, primarily related to the handlin
 
 - **Rule:** The environment where the API server and inference engine run should be isolated, with minimal necessary permissions.
 - **Reasoning:** In the event of a security breach (e.g., through a malicious model), an isolated environment (like a Docker container) limits the potential damage to the host system.
+
+## 5. Cryptography Fixes (Rev 3, 2026-11)
+
+- **Shamir secret sharing (`core/shamir.py`)**: polynomial coefficients now come from `secrets.randbelow`. Previously they were a constant, so a single share revealed the secret.
+- **Node keys (`core/security.py`)**: generated from a secure RNG. The hardware fingerprint is only an anti-Sybil identifier, never key material. Set `GENESIS_NODE_KEY_PATH` to persist a node key (file mode 0600).
+- **Threshold signature**: replaced by a real k-of-n multi-signature. Each signer keeps its own key; nothing is reassembled.
+- **Encrypted task queue (`core/secure_dtq.py`)**: the task key is split with real Shamir shares (previously share #0 *was* the key). Fernet keys are encoded correctly.
+- **API**: every endpoint except `/`, `/docs`, `/openapi.json`, `/redoc` requires the `X-API-Key` header matching `GENESIS_API_KEY`. Without that variable the server answers 503.
+- **Secrets in git**: `*.pem`, `*.key`, `*_private_key*`, `.env` are ignored. Node key files that were committed on old branches must be treated as compromised and never reused.

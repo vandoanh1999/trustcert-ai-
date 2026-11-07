@@ -1,10 +1,16 @@
+import base64
 import hashlib
+import json
+import logging
 import secrets
-from typing import Dict, List
+import time
+from typing import Callable, Dict, List
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
-import logging
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+from core.shamir import SecretSharer
 
 logger = logging.getLogger(__name__)
 
@@ -17,19 +23,26 @@ class SecureTaskPayload:
     
     @staticmethod
     def generate_key(password: bytes, salt: bytes) -> bytes:
-        """Generate encryption key"""
-        kdf = PBKDF2(
+        """Derive a raw 32-byte key (PBKDF2-HMAC-SHA256, 600k iterations)."""
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
-            iterations=100000,
+            iterations=600_000,
         )
         return kdf.derive(password)
-    
+
+    @staticmethod
+    def _fernet(key: bytes) -> Fernet:
+        # Fernet expects a urlsafe-base64 encoding of 32 raw bytes.
+        if len(key) != 32:
+            raise ValueError("Encryption key must be 32 raw bytes.")
+        return Fernet(base64.urlsafe_b64encode(key))
+
     @staticmethod
     def encrypt_payload(payload: dict, key: bytes) -> bytes:
         """Encrypt task payload"""
-        fernet = Fernet(key)
+        fernet = SecureTaskPayload._fernet(key)
         payload_json = json.dumps(payload).encode()
         encrypted = fernet.encrypt(payload_json)
         return encrypted
@@ -37,47 +50,39 @@ class SecureTaskPayload:
     @staticmethod
     def decrypt_payload(encrypted: bytes, key: bytes) -> dict:
         """Decrypt task payload"""
-        fernet = Fernet(key)
+        fernet = SecureTaskPayload._fernet(key)
         decrypted = fernet.decrypt(encrypted)
         return json.loads(decrypted.decode())
 
 class ThresholdSecretSharing:
     """
-    Shamir's Secret Sharing (simplified)
-    - Chia key thành N shares
-    - Cần M shares để reconstruct (M < N)
-    - Worker nodes chỉ có 1 share, cần collaborate để decrypt
+    Shamir's Secret Sharing over the 256-bit prime field of core.shamir.
+    - Splits a 32-byte key into N shares; any M of them rebuild it, fewer reveal nothing.
+    - Each share is the UTF-8 encoding of "x-y" (hex), so it can travel as share.hex().
+
+    SECURITY FIX: the previous version stored the whole secret in shares[0]
+    (and random noise in the others), so the first holder alone had the key.
     """
-    
+
     @staticmethod
     def split_secret(secret: bytes, threshold: int, num_shares: int) -> List[bytes]:
-        """
-        Split secret into shares
-        NOTE: Đây là implementation đơn giản hóa
-        Production nên dùng thư viện như 'secretsharing'
-        """
-        shares = []
-        
-        # Simplified: XOR-based splitting (không an toàn 100%)
-        # TODO: Implement proper Shamir's Secret Sharing
-        
-        for i in range(num_shares):
-            share_data = secrets.token_bytes(len(secret))
-            shares.append(share_data)
-        
-        # Store original secret in first share (simplified)
-        shares[0] = secret
-        
-        return shares
-    
+        if not 1 <= threshold <= num_shares:
+            raise ValueError("Need 1 <= threshold <= num_shares.")
+        if len(secret) != 32:
+            raise ValueError("Secret must be exactly 32 bytes.")
+        if int.from_bytes(secret, "big") >= SecretSharer.prime:
+            raise ValueError("Secret exceeds the field size; generate a new key.")
+        shares = SecretSharer.split_secret(secret.hex(), threshold, num_shares)
+        return [share.encode("utf-8") for share in shares]
+
     @staticmethod
     def reconstruct_secret(shares: List[bytes], threshold: int) -> bytes:
-        """Reconstruct secret from shares"""
-        if len(shares) < threshold:
-            raise ValueError(f"Need at least {threshold} shares")
-        
-        # Simplified reconstruction
-        return shares[0]
+        """Reconstruct secret from >= threshold distinct shares."""
+        decoded = list({share.decode("utf-8") for share in shares})
+        if len(decoded) < threshold:
+            raise ValueError(f"Need at least {threshold} distinct shares")
+        secret_hex = SecretSharer.recover_secret(decoded[:threshold]).zfill(64)
+        return bytes.fromhex(secret_hex)
 
 class MPCDistributedTaskQueue:
     """
@@ -111,10 +116,12 @@ class MPCDistributedTaskQueue:
             f"{task_type}:{json.dumps(payload)}:{time.time()}".encode()
         ).hexdigest()[:16]
         
-        # 1. Generate encryption key
-        password = secrets.token_bytes(32)
+        # 1. Generate a random 32-byte key that fits the Shamir field
         salt = secrets.token_bytes(16)
-        encryption_key = SecureTaskPayload.generate_key(password, salt)
+        while True:
+            encryption_key = secrets.token_bytes(32)
+            if int.from_bytes(encryption_key, "big") < SecretSharer.prime:
+                break
         
         # 2. Encrypt payload
         encrypted_payload = SecureTaskPayload.encrypt_payload(payload, encryption_key)

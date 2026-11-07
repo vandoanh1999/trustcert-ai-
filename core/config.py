@@ -5,7 +5,12 @@ This file consolidates all network parameters, thresholds, and magic numbers
 for easy tuning and maintenance.
 """
 
+import os
+
 # --- API Configuration ---
+# Clients must send this value in the X-API-Key header. Unset -> protected endpoints return 503.
+API_KEY = os.getenv("GENESIS_API_KEY") or os.getenv("API_KEY")
+API_PUBLIC_PATHS = {"/", "/docs", "/openapi.json", "/redoc"}
 API_REQUEST_WINDOW_SECONDS = 60
 API_MAX_REQUESTS_PER_WINDOW = 50
 

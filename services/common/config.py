@@ -11,7 +11,7 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 # --- Cấu hình API Gateway ---
-API_KEY = os.getenv("API_KEY", "your_super_secret_api_key")
+API_KEY = os.getenv("API_KEY")  # no insecure default
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # --- Cấu hình Model & Dịch vụ ---

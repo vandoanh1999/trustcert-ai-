@@ -8,6 +8,7 @@ trusted target (tau_target) without revealing the actual values.
 
 This is a working stub (cryptographically incomplete but architecturally correct).
 """
+import os
 import torch
 import hashlib
 import json
@@ -155,4 +156,3 @@ def compute_zk_penalty(
         return torch.tensor(penalty_scale, dtype=DTYPE, device=tau_forge.device)
 
 # This import was missing from the original file
-import os

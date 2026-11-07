@@ -9,9 +9,11 @@ This code is sourced from: https://github.com/shea256/secret-sharing
 Released under the MIT License.
 """
 
+import secrets
+import string
+
 import six
 from six.moves import range
-import string
 
 # --- Helper functions originally from utilitybelt ---
 def int_to_charset(n, charset):
@@ -36,13 +38,12 @@ def charset_to_int(s, charset):
 def random_polynomial(degree, intercept, upper_bound):
     if degree < 0:
         raise ValueError('Degree must be a non-negative integer.')
+    # SECURITY FIX: coefficients must come from a CSPRNG. The previous code used a
+    # constant derived from string.printable, which let anyone recover the secret
+    # from a single share.
     coefficients = [intercept]
-    for i in range(degree):
-        random_coeff = six.integer_types[-1].from_bytes(
-            six.binary_type(string.printable.encode('ascii')),
-            byteorder='big'
-        ) % upper_bound
-        coefficients.append(random_coeff)
+    for _ in range(degree):
+        coefficients.append(secrets.randbelow(upper_bound))
     return coefficients
 
 def get_polynomial_points(coefficients, num_points, upper_bound):
@@ -110,7 +111,9 @@ class SecretSharer(object):
             y_coords.append(charset_to_int(parts[1], cls.share_charset))
         free_coefficient = lagrange_interpolate(0, x_coords, y_coords, cls.prime)
         secret_string = int_to_charset(free_coefficient, cls.share_charset)
-        return secret_string
+        # Keep leading zeros: shares are padded to the secret's length.
+        width = max(len(s.split('-')[1]) for s in shares)
+        return secret_string.zfill(width)
 
 class PlaintextToHexSecretSharer(SecretSharer):
     """

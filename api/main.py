@@ -5,6 +5,7 @@ This version includes rate-limiting and uses the centralized config.
 """
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+import hmac
 import time
 from collections import defaultdict
 
@@ -16,6 +17,18 @@ app = FastAPI(
     description="Endpoints for interacting with the Genesis expert ecosystem.",
     version="8.0.0"
 )
+
+# --- Security: API key check (runs after rate limiting, see middleware order below) ---
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    if request.url.path in API_PUBLIC_PATHS:
+        return await call_next(request)
+    if not API_KEY:
+        return JSONResponse(status_code=503, content={"detail": "API key not configured on server (set GENESIS_API_KEY)."})
+    supplied = request.headers.get("x-api-key", "")
+    if not hmac.compare_digest(supplied.encode(), API_KEY.encode()):
+        return JSONResponse(status_code=401, content={"detail": "Invalid or missing X-API-Key."})
+    return await call_next(request)
 
 # --- V8 Security Hardening: Rate Limiting ---
 request_counts = defaultdict(lambda: [])
@@ -31,6 +44,10 @@ async def rate_limit_middleware(request: Request, call_next):
         return JSONResponse(status_code=429, content={"detail": "Too Many Requests"})
 
     request_counts[client_ip] = request_timestamps + [current_time]
+    # Drop idle clients so the table cannot grow without bound.
+    if len(request_counts) > 10_000:
+        for ip in [ip for ip, ts in request_counts.items() if not ts or ts[-1] <= current_time - API_REQUEST_WINDOW_SECONDS]:
+            request_counts.pop(ip, None)
 
     response = await call_next(request)
     return response
